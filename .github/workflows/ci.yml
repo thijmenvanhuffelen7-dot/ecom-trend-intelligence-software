@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: postgresql://trendscope:trendscope@localhost:5432/trendscope?sslmode=disable
+  CLICKHOUSE_URL: http://trendscope:trendscope@localhost:8123/trendscope
+  AUTH_MODE: dev
+  AUTH_SECRET: ci-only-secret-0123456789abcdef0123456789
+  DATA_MODE: mock
+
+jobs:
+  python:
+    name: Workers (ruff · mypy · pytest)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: workers } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: { enable-cache: true }
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest -q
+
+  web:
+    name: Web (typecheck · unit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --if-present typecheck
+      - run: pnpm -r --if-present test
+
+  e2e:
+    name: Migraties · seed · build · Playwright
+    runs-on: ubuntu-latest
+    needs: [python, web]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: { POSTGRES_USER: trendscope, POSTGRES_PASSWORD: trendscope, POSTGRES_DB: trendscope }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U trendscope" --health-interval 3s --health-retries 20
+      clickhouse:
+        image: clickhouse/clickhouse-server:24.8
+        env: { CLICKHOUSE_USER: trendscope, CLICKHOUSE_PASSWORD: trendscope, CLICKHOUSE_DB: trendscope }
+        ports: ["8123:8123"]
+        options: --health-cmd "wget -qO- http://localhost:8123/ping" --health-interval 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: astral-sh/setup-uv@v6
+        with: { enable-cache: true }
+      - run: pnpm install --frozen-lockfile
+      - name: Postgres-migraties (up, down, up — down-migraties moeten werken)
+        run: |
+          pnpm db:migrate
+          for i in 1 2 3 4; do pnpm db:rollback; done
+          pnpm db:migrate
+      - name: ClickHouse-migraties + seed
+        working-directory: workers
+        run: |
+          uv sync --frozen
+          uv run trendscope migrate-clickhouse
+          uv run trendscope seed
+          RUN_INTEGRATION=1 uv run pytest -q -m integration
+      - name: Gegenereerde DB-types zijn actueel
+        run: |
+          pnpm db:codegen
+          git diff --exit-code packages/db/src/generated.ts
+      - run: pnpm --filter @trendscope/web build
+      - run: pnpm --filter @trendscope/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @trendscope/web e2e
+        env: { CI: "true" }
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7

@@ -1,0 +1,37 @@
+{
+  "products": [
+    {
+      "id": 7810342011034,
+      "title": "CloudPress Posture Corrector ",
+      "handle": "cloudpress-posture-corrector",
+      "body_html": "<p>Ergonomische houdingscorrector.</p>",
+      "published_at": "2026-09-02T10:14:03+02:00",
+      "created_at": "2026-09-02T10:13:51+02:00",
+      "updated_at": "2026-10-18T08:02:11+02:00",
+      "vendor": "Brightnest",
+      "product_type": "Health",
+      "tags": ["posture", "back pain", "bestseller"],
+      "variants": [
+        {"id": 43210001, "title": "S", "sku": "CP-S", "price": "34.95", "compare_at_price": "59.95", "available": true},
+        {"id": 43210002, "title": "M", "sku": "CP-M", "price": "34.95", "compare_at_price": "59.95", "available": true},
+        {"id": 43210003, "title": "L", "sku": "CP-L", "price": "36.95", "compare_at_price": null, "available": false}
+      ],
+      "images": [{"id": 1, "src": "https://cdn.shopify.com/s/files/1/demo/cloudpress-1.jpg"}],
+      "options": [{"name": "Size", "values": ["S", "M", "L"]}]
+    },
+    {
+      "id": 7810342011035,
+      "title": "Aurora Galaxy Star Projector",
+      "handle": "aurora-galaxy-star-projector",
+      "published_at": "2026-10-11T19:00:00+02:00",
+      "updated_at": "2026-10-19T12:00:00+02:00",
+      "vendor": "Brightnest",
+      "product_type": "",
+      "tags": "home decor, kids, night light",
+      "variants": [
+        {"id": 43220001, "title": "Default Title", "sku": "", "price": "49.00", "compare_at_price": "", "available": true}
+      ],
+      "images": []
+    }
+  ]
+}

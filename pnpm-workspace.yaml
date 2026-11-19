@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+onlyBuiltDependencies:
+  - dbmate
+  - esbuild
+  - sharp
+  - unrs-resolver

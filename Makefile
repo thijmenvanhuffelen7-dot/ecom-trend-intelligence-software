@@ -1,0 +1,49 @@
+# Trendscope — veelgebruikte commando's. `make help` toont een overzicht.
+SHELL := /bin/bash
+COMPOSE := docker compose -f infra/docker/docker-compose.dev.yml
+ENV := set -a; [ -f .env ] && . ./.env; set +a;
+
+.PHONY: help setup dev-services stop migrate seed dev test lint typecheck e2e check clean
+
+help: ## Toon deze hulp
+	@grep -E '^[a-z0-9-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[32m%-14s\033[0m %s\n", $$1, $$2}'
+
+setup: ## Installeer alle dependencies (pnpm + uv) en maak .env aan
+	@[ -f .env ] || cp .env.example .env
+	pnpm install
+	cd workers && uv sync
+
+dev-services: ## Start Postgres, ClickHouse, Redis, Meilisearch, MinIO en Mailpit
+	$(COMPOSE) up -d --wait
+
+stop: ## Stop de services
+	$(COMPOSE) down
+
+migrate: ## Draai Postgres- én ClickHouse-migraties
+	$(ENV) pnpm -s db:migrate
+	$(ENV) cd workers && uv run trendscope migrate-clickhouse
+
+seed: ## Vul alle databases met de samenhangende demodataset
+	$(ENV) cd workers && uv run trendscope seed
+
+dev: ## Start de web-app op http://localhost:3000
+	$(ENV) pnpm --filter @trendscope/web dev
+
+test: ## Unit-tests (TypeScript + Python)
+	pnpm -r --if-present test
+	cd workers && uv run pytest -q
+
+lint: ## Linters
+	cd workers && uv run ruff check . && uv run ruff format --check .
+
+typecheck: ## Typecheck (TypeScript + mypy)
+	pnpm -r --if-present typecheck
+	cd workers && uv run mypy
+
+e2e: ## End-to-end-tests (vereist draaiende services + seed)
+	$(ENV) pnpm --filter @trendscope/web e2e
+
+check: lint typecheck test ## Alles wat CI ook draait (behalve e2e)
+
+clean: ## Verwijder build-artefacten
+	rm -rf apps/web/.next node_modules/.cache workers/.pytest_cache workers/.mypy_cache

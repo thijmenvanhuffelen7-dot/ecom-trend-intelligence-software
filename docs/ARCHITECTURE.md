@@ -1,7 +1,7 @@
 # Architectuurplan — E-commerce Trend & Competitive Intelligence Platform
 
-> Status: **voorstel (fase 1), wacht op akkoord.** Werknaam in dit document: **Trendscope**.
-> Nog geen code gebouwd; na akkoord start fase 1 (scaffold, CI/CD, auth, basis-UI).
+> Status: **akkoord (aanbevolen opties) · fase 1 gebouwd.** Werknaam: **Trendscope**.
+> Afwijkingen en aanscherpingen tijdens het bouwen: [ADR 0001](adr/0001-fase-1-keuzes.md).
 
 ---
 

@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ── Design tokens ─────────────────────────────────────────── */
+:root {
+  --frame: #0b0c0d;          /* buitenrand + zijbalk */
+  --frame-fg: #9a9ea3;
+  --frame-fg-active: #ffffff;
+  --frame-hover: #17191b;
+
+  --bg: #ffffff;             /* inhoudspaneel */
+  --bg-subtle: #f7f7f5;
+  --surface: #ffffff;
+  --surface-hover: #f6f6f3;
+  --border: #ececea;
+  --border-strong: #dcdcd8;
+
+  --fg: #121314;
+  --fg-muted: #6b6e72;
+  --fg-subtle: #9a9da1;
+
+  --accent: #1fb95a;
+  --accent-strong: #138a42;
+  --accent-soft: #e9f9ef;
+  --accent-fg: #ffffff;
+
+  --danger: #e5484d;
+  --danger-soft: #fdecec;
+  --warning: #f59e0b;
+  --warning-soft: #fef5e4;
+  --info: #3e63dd;
+  --info-soft: #edf1fe;
+
+  --chart-1: #1fb95a;
+  --chart-2: #3e63dd;
+  --chart-3: #f59e0b;
+  --chart-4: #8e4ec6;
+  --chart-5: #e5484d;
+  --chart-6: #12a594;
+  --chart-grid: #f0f0ee;
+
+  --shadow-sm: 0 1px 2px rgb(16 17 18 / 0.04), 0 1px 1px rgb(16 17 18 / 0.03);
+  --shadow-md: 0 8px 24px -8px rgb(16 17 18 / 0.12), 0 2px 6px rgb(16 17 18 / 0.05);
+  --shadow-pop: 0 20px 48px -12px rgb(16 17 18 / 0.25), 0 4px 12px rgb(16 17 18 / 0.06);
+}
+
+:root[data-theme="dark"] {
+  --frame: #050506;
+  --frame-fg: #85898e;
+  --frame-hover: #141517;
+
+  --bg: #101113;
+  --bg-subtle: #16171a;
+  --surface: #16171a;
+  --surface-hover: #1c1d21;
+  --border: #25272b;
+  --border-strong: #33363b;
+
+  --fg: #ededee;
+  --fg-muted: #9b9ea4;
+  --fg-subtle: #6c7076;
+
+  --accent: #2fd06d;
+  --accent-strong: #5fe08f;
+  --accent-soft: #11291a;
+  --accent-fg: #06130b;
+
+  --danger-soft: #2c1415;
+  --warning-soft: #2a2010;
+  --info-soft: #151c33;
+  --chart-grid: #222428;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 8px 24px -8px rgb(0 0 0 / 0.6);
+  --shadow-pop: 0 20px 48px -12px rgb(0 0 0 / 0.7);
+}
+
+@theme inline {
+  --color-frame: var(--frame);
+  --color-frame-fg: var(--frame-fg);
+  --color-frame-fg-active: var(--frame-fg-active);
+  --color-frame-hover: var(--frame-hover);
+  --color-bg: var(--bg);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-pop: var(--shadow-pop);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--frame);
+  color: var(--fg);
+  font-feature-settings: "cv11", "ss01";
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dunne, rustige scrollbars in het inhoudspaneel */
+.scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Subtiele fade-in voor pagina-inhoud */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.animate-rise {
+  animation: rise 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-subtle);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.5), transparent);
+  animation: shimmer 1.4s infinite;
+}

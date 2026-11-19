@@ -1,0 +1,14 @@
+id: shopify_storefront
+display_name: Shopify publieke storefront-endpoints (/products.json)
+kind: scrape_public
+legal_basis_doc: docs/sources/shopify.md
+legal_review: pending
+respects_robots_txt: true
+default_rate_limit:
+  per_domain_rps: 0.5
+  global_rps: 50
+requires_credentials: []
+personal_data: none
+retention_days: 730
+freshness_sla_hours: 24
+module: trendscope.connectors.shopify.connector:ShopifyStorefrontConnector
