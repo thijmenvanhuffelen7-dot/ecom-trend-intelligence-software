@@ -6,24 +6,42 @@ Resultaat: een realistische tijdlijn met nieuwe/verwijderde producten, prijswijz
 
 from __future__ import annotations
 
+import threading
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from functools import partial
 from typing import Any
 
 import psycopg
 
 from trendscope.core.clickhouse import get_client
 from trendscope.core.settings import Settings
+from trendscope.mockweb.ads_world import reset_ads_caches
 from trendscope.mockweb.transport import MockWebTransport
 from trendscope.mockweb.world import day_timestamp, reset_caches
+from trendscope.pipeline.store_crawl import CrawlOutcome
 from trendscope.scheduler.runner import run_target
 
+_local = threading.local()
 
-def simulate(settings: Settings, days: int, *, progress: bool = True) -> dict[str, Any]:
+
+def _run_one(
+    settings: Settings, target_id: int, entity_id: int, day: int, transport: MockWebTransport
+) -> CrawlOutcome | None:
+    """Eén crawl in een workerthread, met een eigen database- en ClickHouse-verbinding per thread."""
+    if getattr(_local, "conn", None) is None:
+        _local.conn = psycopg.connect(settings.database_url)
+        _local.ch = get_client()
+    now = day_timestamp(day, 6) + timedelta(minutes=int(entity_id or 0) * 7 % 600)
+    return run_target(_local.conn, _local.ch, settings, target_id, now=now, transport=transport)
+
+
+def simulate(settings: Settings, days: int, *, progress: bool = True, workers: int = 8) -> dict[str, Any]:
     if settings.data_mode != "mock":
         raise RuntimeError("simulate werkt alleen met DATA_MODE=mock")
     reset_caches()
-    ch = get_client()
+    reset_ads_caches()
     totals: Counter[str] = Counter()
     with psycopg.connect(settings.database_url) as conn:
         for day in range(1, days + 1):
@@ -33,15 +51,26 @@ def simulate(settings: Settings, days: int, *, progress: bool = True) -> dict[st
 
                 found = discover_and_probe(conn, settings, now=day_timestamp(day, 4), transport=transport)
                 totals.update({f"discovery_{k}": v for k, v in found.items()})
+            # Eerst winkels (nieuwe producten), dan ads (koppelen aan die producten), zoektermen als laatste.
+            # Binnen een fase parallel, zoals meerdere workers in productie.
             targets = conn.execute(
-                "SELECT id, entity_id FROM crawl_targets WHERE connector_id = 'shopify_storefront' ORDER BY id"
+                """SELECT id, coalesce(entity_id, id),
+                          CASE WHEN connector_id = 'shopify_storefront' THEN 0 WHEN target LIKE 'q:%%' THEN 2 ELSE 1 END
+                   FROM crawl_targets ORDER BY 3, id"""
             ).fetchall()
-            for target_id, entity_id in targets:
-                now = day_timestamp(day, 6) + timedelta(minutes=int(entity_id or 0) * 7 % 600)
-                outcome = run_target(conn, ch, settings, target_id, now=now, transport=transport)
-                if outcome:
-                    totals.update(e.type for e in outcome.events)
-                    totals["crawls"] += 1
+            for phase in (0, 1, 2):
+                batch = [(tid, eid) for tid, eid, ph in targets if ph == phase]
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    for outcome in pool.map(
+                        partial(_run_one, settings, day=day, transport=transport),
+                        *zip(*batch, strict=True) if batch else ([], []),
+                    ):
+                        if outcome:
+                            totals.update(e.type for e in outcome.events)
+                            totals.update(
+                                {k: v for k, v in outcome.stats.items() if k.startswith("ad_") and isinstance(v, int)}
+                            )
+                            totals["crawls"] += 1
             if progress:
                 print(
                     f"  dag {day}/{days}: {totals['crawls']} crawls, {totals['product_added']} nieuw, "

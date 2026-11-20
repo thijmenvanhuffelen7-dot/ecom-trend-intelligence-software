@@ -3,7 +3,7 @@ SHELL := /bin/bash
 COMPOSE := docker compose -f infra/docker/docker-compose.dev.yml
 ENV := set -a; [ -f .env ] && . ./.env; set +a;
 
-.PHONY: help setup dev-services stop migrate seed simulate index dev worker tick discover test lint typecheck e2e check clean
+.PHONY: help setup dev-services stop migrate seed simulate screenshots index dev worker tick discover test lint typecheck e2e check clean
 
 help: ## Toon deze hulp
 	@grep -E '^[a-z0-9-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[32m%-14s\033[0m %s\n", $$1, $$2}'
@@ -25,10 +25,13 @@ migrate: ## Draai Postgres- én ClickHouse-migraties
 
 seed: ## Demowereld seeden, 14 dagen crawls + discovery simuleren en de zoekindex vullen
 	$(ENV) cd workers && uv run trendscope seed
-	$(MAKE) simulate index
+	$(MAKE) simulate screenshots index
 
 simulate: ## Speel 14 dagen crawls en discovery af op het nep-internet (mock-modus)
 	$(ENV) cd workers && uv run trendscope simulate --days 14
+
+screenshots: ## Screenshots van ontdekte winkels (Playwright → S3)
+	-$(ENV) cd workers && uv run trendscope screenshots --limit 50
 
 index: ## (Her)indexeer winkels en producten in Meilisearch
 	-$(ENV) cd workers && uv run trendscope index-search

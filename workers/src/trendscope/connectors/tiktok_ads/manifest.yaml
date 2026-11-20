@@ -1,0 +1,14 @@
+id: tiktok_commercial_content
+display_name: TikTok Commercial Content API
+kind: official_api
+legal_basis_doc: docs/sources/tiktok_commercial_content.md
+legal_review: pending
+respects_robots_txt: false
+default_rate_limit:
+  per_domain_rps: 1
+  global_rps: 1
+requires_credentials: [TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET]
+personal_data: none
+retention_days: 730
+freshness_sla_hours: 24
+module: null

@@ -31,6 +31,9 @@ describe("estimates", () => {
     expect(e).not.toBeNull();
     expect(formatEstimateRange(e!, "en")).toBe("€13K – €29K");
   });
+  it("shows a single number for exact values", () => {
+    expect(formatEstimateRange({ value: 4800, low: 4800, high: 4800, confidence: "high", method: "x" }, "en")).toBe("4.8K");
+  });
   it("rejects malformed estimates", () => {
     expect(parseEstimate({ value: "x" })).toBeNull();
   });

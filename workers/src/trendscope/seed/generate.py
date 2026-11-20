@@ -18,6 +18,8 @@ from urllib.parse import quote
 import psycopg
 from psycopg.types.json import Jsonb
 
+from trendscope.ads.estimates import estimate_reach, estimate_spend
+from trendscope.ads.records import AdRecord
 from trendscope.connectors.base import load_manifests
 from trendscope.core.clickhouse import get_client
 from trendscope.core.settings import get_settings
@@ -467,54 +469,130 @@ def run(reset: bool = True) -> dict[str, int]:
             ],
         )
 
-        # ── Adverteerders & ads ──────────────────────────────────
+        # ── Adverteerders & ads (dag 0 van de Meta Ad Library op het nep-internet) ──
         ad_count = 0
+        sim_start = TODAY - timedelta(days=SIMULATION_DAYS + 1)
         for store in world.stores:
             pages = [store["name"]] + (
                 [f"{store['name']} {rng.choice(['Official', 'Shop', 'EU', 'Beauty'])}"] if rng.random() < 0.4 else []
             )
+            store["pages"] = []
             for pi, page in enumerate(pages):
+                page_id = str(100_000_000_000 + store["id"] * 10 + pi)
                 cur.execute(
-                    "INSERT INTO advertisers (platform, external_id, name, store_id) VALUES ('meta',%s,%s,%s) RETURNING id",
-                    (str(100_000_000_000 + store["id"] * 10 + pi), page, store["id"]),
+                    """INSERT INTO advertisers (platform, external_id, name, store_id, page_url, avatar_url, country)
+                       VALUES ('meta',%s,%s,%s,%s,%s,%s) RETURNING id""",
+                    (
+                        page_id,
+                        page,
+                        store["id"],
+                        f"https://www.facebook.com/{page_id}",
+                        media("avatar", n=page, h=rng.randint(0, 359)),
+                        store["country"],
+                    ),
                 )
                 adv_id = _returned_id(cur)
+                page_ads: list[dict[str, Any]] = []
                 for _ in range(rng.randint(3, 9)):
-                    cl = rng.choice([c for c in world.clusters if store["id"] in c["stores"]] or world.clusters)
-                    start = TODAY - timedelta(days=min(int(rng.triangular(1, 220, 12)), store["age_days"]))
+                    if page_ads and rng.random() < 0.3:
+                        # variant: dezelfde creative, andere doelgroep/plaatsing
+                        src = rng.choice(page_ads)
+                        cl = next(c for c in world.clusters if c["id"] == src["cluster_id"])
+                        hook, fmt, body, headline = src["hook"], src["format"], src["body"], src["headline"]
+                    else:
+                        cl = rng.choice([c for c in world.clusters if store["id"] in c["stores"]] or world.clusters)
+                        hook = rng.choice(C.HOOKS).format(p=cl["title"].split()[-1].lower())
+                        fmt = rng.choices(["video", "image", "carousel"], weights=[6, 3, 1])[0]
+                        body = f"{hook}\n\n{cl['title']} — free shipping today only. ⭐⭐⭐⭐⭐ 4.8/5 from 2,000+ customers."
+                        headline = cl["title"]
+                    start = sim_start - timedelta(
+                        days=min(int(rng.triangular(1, 220, 12)), max(1, store["age_days"] - SIMULATION_DAYS - 1))
+                    )
                     active = rng.random() < 0.72
-                    fmt = rng.choices(["video", "image", "carousel"], weights=[6, 3, 1])[0]
-                    hook = rng.choice(C.HOOKS).format(p=cl["title"].split()[-1].lower())
-                    reach = int(rng.lognormvariate(10, 1.3))
+                    end = (
+                        None
+                        if active
+                        else min(sim_start - timedelta(days=1), start + timedelta(days=rng.randint(3, 60)))
+                    )
+                    eu = [c for c in ["NL", "BE", "DE", "FR", "ES", "IT", "AT", "SE"] if c != store["country"]]
+                    countries = sorted(
+                        ({store["country"]} if store["country"] in eu + ["NL"] else set())
+                        | set(rng.sample(eu, rng.randint(1, 3)))
+                    )
+                    ext_id = str(900_000_000_000 + ad_count)
+                    days = max(1, ((end or sim_start) - start).days)
+                    ad_media = [
+                        {
+                            "type": "video" if fmt == "video" else "image",
+                            "url": media("ad", e=cl["emoji"], c=store["color"], t=hook, v=int(fmt == "video")),
+                            "poster": None,
+                            "storage_key": None,
+                        }
+                    ]
+                    record = AdRecord(
+                        platform="meta",
+                        external_id=ext_id,
+                        advertiser_external_id=page_id,
+                        advertiser_name=page,
+                        format=fmt,
+                        body=body,
+                        headline=headline,
+                        link_caption=store["domain"].upper(),
+                        link_description="Free shipping · 30-day returns",
+                        cta=rng.choice(C.CTAS),
+                        landing_url=f"https://{store['domain']}/products/{slugify(cl['title'])}",
+                        countries=countries,
+                        languages=[store["language"]],
+                        publisher_platforms=sorted(
+                            rng.sample(["facebook", "instagram", "messenger", "audience_network"], rng.randint(1, 3))
+                        ),
+                        start_date=start,
+                        end_date=end,
+                        is_active=active,
+                        snapshot_url=f"https://www.facebook.com/ads/archive/render_ad/?id={ext_id}",
+                        eu_reach=int(rng.lognormvariate(7.5, 1.0) * days**0.8),
+                        target_ages="18–65+",
+                        target_gender="All",
+                    )
+                    reach = estimate_reach(record, 1, sim_start)
                     cur.execute(
                         """INSERT INTO ads (platform, external_id, advertiser_id, format, body, headline, cta, media_urls,
                              thumbnail_url, landing_url, countries, languages, start_date, end_date, is_active,
-                             variants_count, est_spend, est_reach, first_seen, last_seen)
-                           VALUES ('meta',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                             variants_count, est_spend, est_reach, first_seen, last_seen, source_connector, snapshot_url,
+                             link_caption, link_description, publisher_platforms, creative_hash, eu_reach, media,
+                             target_ages, target_gender, landing_domain, content_hash)
+                           VALUES ('meta',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,%s,%s,%s,%s,'meta_ad_library',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                           RETURNING id""",
                         (
-                            str(900_000_000_000 + ad_count),
+                            ext_id,
                             adv_id,
                             fmt,
-                            f"{hook}\n\n{cl['title']} — free shipping today only. ⭐⭐⭐⭐⭐ 4.8/5 from 2,000+ customers.",
-                            cl["title"],
-                            rng.choice(C.CTAS),
-                            [media("ad", e=cl["emoji"], c=store["color"], t=hook, v=int(fmt == "video"))],
-                            media("ad", e=cl["emoji"], c=store["color"], t=hook, v=int(fmt == "video")),
-                            f"https://{store['domain']}/products/{slugify(cl['title'])}",
-                            sorted({store["country"]} | set(rng.sample(["NL", "BE", "DE", "FR", "GB", "US"], 2)))[:4],
-                            ["en"],
+                            body,
+                            headline,
+                            record.cta,
+                            [ad_media[0]["url"]],
+                            ad_media[0]["url"],
+                            record.landing_url,
+                            countries,
+                            record.languages,
                             start,
-                            None if active else start + timedelta(days=rng.randint(3, 60)),
+                            end,
                             active,
-                            rng.choices([1, 2, 3, 5, 8, 14], weights=[10, 6, 4, 2, 1, 1])[0],
-                            Jsonb(
-                                _estimate(
-                                    reach * rng.uniform(0.004, 0.012), "EUR", "EU-transparantiebereik × CPM-model"
-                                )
-                            ),
-                            Jsonb(_estimate(reach, None, "Meta EU-transparantiedata (demo)")),
+                            Jsonb(estimate_spend(reach, countries)),
+                            Jsonb(reach),
                             datetime.combine(start, datetime.min.time(), tzinfo=UTC),
                             now,
+                            record.snapshot_url,
+                            record.link_caption,
+                            record.link_description,
+                            record.publisher_platforms,
+                            record.creative_hash,
+                            record.eu_reach,
+                            Jsonb(ad_media),
+                            record.target_ages,
+                            record.target_gender,
+                            record.landing_domain,
+                            record.content_hash,
                         ),
                     )
                     ad_id = _returned_id(cur)
@@ -523,9 +601,33 @@ def run(reset: bool = True) -> dict[str, int]:
                     cl["advertisers"].add(adv_id)
                     cur.execute(
                         """INSERT INTO entity_links (from_type, from_id, to_type, to_id, link_type, confidence, evidence)
-                           VALUES ('ad',%s,'product_cluster',%s,'promotes',%s,%s) ON CONFLICT DO NOTHING""",
-                        (ad_id, cl["id"], round(rng.uniform(0.75, 0.98), 2), Jsonb({"via": "landing_url"})),
+                           VALUES ('ad',%s,'product_cluster',%s,'promotes',0.95,%s) ON CONFLICT DO NOTHING""",
+                        (ad_id, cl["id"], Jsonb({"method": "landing_page"})),
                     )
+                    page_ads.append(
+                        record.model_dump(mode="json")
+                        | {
+                            "hook": hook,
+                            "cluster_id": cl["id"],
+                            "media": ad_media,
+                            "emoji": cl["emoji"],
+                            "color": store["color"],
+                        }
+                    )
+                store["pages"].append({"page_id": page_id, "name": page, "ads": page_ads})
+                cur.execute(
+                    """WITH g AS (SELECT creative_hash, count(*) FILTER (WHERE is_active) n FROM ads WHERE advertiser_id = %(a)s GROUP BY 1)
+                       UPDATE ads x SET variants_count = GREATEST(1, g.n) FROM g WHERE x.advertiser_id = %(a)s AND x.creative_hash = g.creative_hash""",
+                    {"a": adv_id},
+                )
+                cur.execute(
+                    """UPDATE advertisers SET active_ads = (SELECT count(*) FROM ads WHERE advertiser_id = %(a)s AND is_active),
+                         total_ads = (SELECT count(*) FROM ads WHERE advertiser_id = %(a)s),
+                         eu_reach_total = (SELECT coalesce(sum(eu_reach), 0) FROM ads WHERE advertiser_id = %(a)s),
+                         first_ad_at = (SELECT min(start_date) FROM ads WHERE advertiser_id = %(a)s),
+                         first_seen = (SELECT min(first_seen) FROM ads WHERE advertiser_id = %(a)s) WHERE id = %(a)s""",
+                    {"a": adv_id},
+                )
 
         # ── Creators & video's ───────────────────────────────────
         for handle in C.CREATOR_HANDLES:
@@ -722,8 +824,6 @@ def run(reset: bool = True) -> dict[str, int]:
         # ── Connectors ───────────────────────────────────────────
         manifests = load_manifests()
         planned = [
-            ("meta_ad_library", "Meta Ad Library API", "official_api", 24),
-            ("tiktok_commercial_content", "TikTok Commercial Content Library", "official_api", 24),
             ("google_trends", "Google Trends API (alpha)", "official_api", 24),
             ("reddit", "Reddit API", "official_api", 12),
             ("aliexpress_affiliate", "AliExpress Affiliate API", "official_api", 24),
@@ -816,6 +916,7 @@ def run(reset: bool = True) -> dict[str, int]:
                 color=st["color"],
                 niches=st["niches"],
                 technologies=st["techs"],
+                pages=st["pages"],
                 social=st["social"],
                 products=st["baseline_products"],
             )
@@ -825,6 +926,7 @@ def run(reset: bool = True) -> dict[str, int]:
         day0=TODAY - timedelta(days=SIMULATION_DAYS + 1),
     )
 
+    seed_ad_targets(settings.database_url, now)
     return {
         "niches": len(world.niches),
         "clusters": len(world.clusters),
@@ -859,3 +961,47 @@ def _estimate(value: float, currency: str | None, method: str) -> dict[str, Any]
 
 if __name__ == "__main__":
     print(json.dumps(run(), indent=2))
+
+
+def seed_ad_targets(database_url: str, now: datetime) -> None:
+    """Crawl-targets voor ad-connectors: elke Meta-pagina volgen + zoektermen en TikTok/Google (demowereld)."""
+    from trendscope.mockweb.ads_world import google_advertisers, reset_ads_caches, tiktok_advertisers
+    from trendscope.mockweb.world import reset_caches
+
+    reset_caches()
+    reset_ads_caches()
+    settings = get_settings()
+    rng = random.Random(SEED + 3)
+    with psycopg.connect(database_url) as conn, conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO crawl_targets (connector_id, target, entity_type, entity_id, priority, interval_secs, next_run_at)
+               SELECT 'meta_ad_library', 'page:' || external_id, 'advertiser', id, 40, 86400, %s FROM advertisers WHERE platform = 'meta'""",
+            (now,),
+        )
+        for term in settings.ad_search_terms:
+            cur.execute(
+                "INSERT INTO crawl_targets (connector_id, target, priority, interval_secs, next_run_at) VALUES ('meta_ad_library', %s, 60, 86400, %s)",
+                (f"q:{term}", now + timedelta(minutes=rng.randint(0, 600))),
+            )
+        for niche in C.PRODUCTS:
+            cur.execute(
+                "INSERT INTO crawl_targets (connector_id, target, priority, interval_secs, next_run_at) VALUES ('tiktok_commercial_content', %s, 60, 86400, %s)",
+                (f"q:{niche}|NL", now),
+            )
+        # Google: adverteerders zoeken we live op naam in de dataset; in de demowereld zijn de IDs bekend
+        for adv_id, store in google_advertisers().items():
+            cur.execute(
+                """INSERT INTO advertisers (platform, external_id, name, store_id, country)
+                   SELECT 'google', %s, %s, s.id, s.country FROM stores s WHERE s.domain = %s
+                   ON CONFLICT (platform, external_id) DO NOTHING RETURNING id""",
+                (adv_id, store.name, store.domain),
+            )
+            row = cur.fetchone()
+            if row:
+                cur.execute(
+                    """INSERT INTO crawl_targets (connector_id, target, entity_type, entity_id, priority, interval_secs, next_run_at)
+                       VALUES ('google_ads_transparency', %s, 'advertiser', %s, 50, 172800, %s)""",
+                    (f"adv:{adv_id}", row[0], now),
+                )
+        _ = tiktok_advertisers  # TikTok-adverteerders ontdekken we via de zoektermen
+        conn.commit()

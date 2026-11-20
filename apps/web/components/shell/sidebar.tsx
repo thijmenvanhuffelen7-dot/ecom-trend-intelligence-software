@@ -26,7 +26,7 @@ const ITEMS: NavItem[] = [
   { href: "/explorer/shops", key: "explorer", icon: Compass, match: "/explorer" },
   { href: "/brandtracker", key: "brandtracker", icon: Radar, match: "/brandtracker" },
   { href: "/trends", key: "trends", icon: LineChart, match: "/trends" },
-  { href: "/boards", key: "boards", icon: LayoutGrid, match: "/boards", soon: true },
+  { href: "/boards", key: "boards", icon: LayoutGrid, match: "/boards" },
 ];
 
 function RailLink({ href, active, label, icon: Icon, soon, soonLabel }: { href: string; active: boolean; label: string; icon: NavItem["icon"]; soon?: boolean; soonLabel: string }) {

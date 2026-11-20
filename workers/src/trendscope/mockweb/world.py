@@ -7,7 +7,6 @@ Zo draait in mock-modus de échte crawl-pipeline (HTTP → parse → diff → op
 
 from __future__ import annotations
 
-import copy
 import random
 from datetime import UTC, datetime, time, timedelta
 from functools import lru_cache
@@ -61,13 +60,17 @@ def _new_product(store: StoreBaseline, day: int, k: int, r: random.Random) -> di
     }
 
 
+def _copy_product(p: dict[str, Any]) -> dict[str, Any]:
+    """Snelle kopie: alleen product- en variantvelden worden per dag gewijzigd."""
+    return {**p, "variants": [dict(v) for v in p["variants"]]}
+
+
 @lru_cache(maxsize=4096)
 def _catalog(domain: str, day: int) -> tuple[dict[str, Any], ...]:
     store = sites()[domain]
     if day <= store.launch_day:
-        products = [copy.deepcopy(p) for p in store.products]
-        return tuple(products)
-    products = [copy.deepcopy(p) for p in _catalog(domain, day - 1)]
+        return tuple(_copy_product(p) for p in store.products)
+    products = [_copy_product(p) for p in _catalog(domain, day - 1)]
     r = random.Random(f"{domain}:{day}")
     arch = store.arch if store.arch in NEW_PRODUCT_RATE else "stable"
 

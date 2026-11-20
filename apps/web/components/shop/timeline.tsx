@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightLeft, Ban, Code2, Layers, Minus, PackageCheck, Plus, Tag, Type } from "lucide-react";
+import { ArrowRightLeft, Ban, Code2, Layers, Megaphone, Minus, PackageCheck, Plus, Tag, Type } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DeltaBadge } from "@/components/ui/badge";
 import { useT } from "@/lib/i18n/client";
@@ -13,6 +13,7 @@ const FILTERS = {
   removed: ["product_removed"],
   price: ["price_changed", "compare_at_changed"],
   stock: ["out_of_stock", "back_in_stock", "variants_added", "variants_removed"],
+  ads: ["ad_started", "ad_stopped"],
   tech: ["tech_added", "tech_removed"],
 } as const;
 
@@ -26,6 +27,8 @@ const ICON: Record<string, { icon: React.ComponentType<{ className?: string }>; 
   variants_added: { icon: Layers, cls: "bg-bg-subtle text-fg-muted" },
   variants_removed: { icon: Layers, cls: "bg-bg-subtle text-fg-muted" },
   title_changed: { icon: Type, cls: "bg-bg-subtle text-fg-muted" },
+  ad_started: { icon: Megaphone, cls: "bg-info-soft text-info" },
+  ad_stopped: { icon: Megaphone, cls: "bg-bg-subtle text-fg-muted" },
   tech_added: { icon: Code2, cls: "bg-[#f5effc] text-[#7b3fb3] dark:bg-[#251b31] dark:text-[#c79cf0]" },
   tech_removed: { icon: Code2, cls: "bg-bg-subtle text-fg-muted" },
 };

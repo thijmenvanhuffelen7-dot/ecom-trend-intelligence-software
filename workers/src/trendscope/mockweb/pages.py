@@ -81,6 +81,7 @@ SOCIAL_URL = {
 
 def _shared_head(store: StoreBaseline) -> str:
     return (
+        '<meta charset="utf-8">'
         f"<title>{h.escape(store.name)} – Official Store</title>"
         f'<meta name="description" content="{h.escape(store.name)}: free shipping on all orders.">'
         f'<meta property="og:site_name" content="{h.escape(store.name)}">'
@@ -102,7 +103,35 @@ def _footer(store: StoreBaseline) -> str:
     return f"<footer>{socials}{share}<ul class='list-payment'>{icons}</ul></footer>"
 
 
-def shopify_home(store: StoreBaseline) -> str:
+def _storefront_body(store: StoreBaseline, products: list[dict[str, Any]] | None = None) -> str:
+    """Een geloofwaardige storefront in inline CSS (geen externe bronnen), zodat screenshots op een winkel lijken."""
+    items = (products or store.products)[:4]
+    cards = "".join(
+        f'<div class="card"><div class="img" style="background:hsl({(i * 47 + len(store.name) * 13) % 360} 45% 88%)"></div>'
+        f'<p class="t">{h.escape(p["title"][:34])}</p><p class="p">€ {p["price"]:.2f}</p></div>'
+        for i, p in enumerate(items)
+    )
+    return (
+        f"<style>*{{box-sizing:border-box;margin:0}}body{{font-family:Helvetica,Arial,sans-serif;color:#111;background:#fff}}"
+        f".bar{{background:{store.color};color:#fff;text-align:center;font-size:12px;letter-spacing:.08em;padding:8px}}"
+        f"nav{{display:flex;align-items:center;justify-content:space-between;padding:22px 48px;border-bottom:1px solid #eee}}"
+        f"nav b{{font-size:26px;letter-spacing:-.02em}}nav span{{margin-left:28px;color:#555;font-size:14px}}"
+        f".hero{{display:grid;grid-template-columns:1.1fr 1fr;align-items:center;gap:40px;padding:56px 48px;"
+        f"background:linear-gradient(120deg,color-mix(in oklab,{store.color} 16%,white),#fff)}}"
+        f".hero h1{{font-size:54px;line-height:1.02;letter-spacing:-.03em}}.hero p{{margin:18px 0 26px;color:#444;font-size:17px}}"
+        f".btn{{display:inline-block;background:#111;color:#fff;padding:14px 28px;border-radius:999px;font-weight:700}}"
+        f".blob{{height:300px;border-radius:32px;background:radial-gradient(circle at 30% 30%,#fff,{store.color})}}"
+        f".grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;padding:36px 48px}}"
+        f".img{{aspect-ratio:1;border-radius:14px}}.t{{margin-top:10px;font-size:14px}}.p{{font-weight:700;margin-top:4px}}</style>"
+        f'<div class="bar">FREE SHIPPING ON ALL ORDERS · 30-DAY RETURNS</div>'
+        f"<nav><b>{h.escape(store.name)}</b><div><span>Shop</span><span>Bestsellers</span><span>About</span><span>Cart (0)</span></div></nav>"
+        f'<section class="hero"><div><h1>Feel the difference with {h.escape(store.name)}.</h1>'
+        f'<p>Loved by 20,000+ customers. Rated 4.8/5.</p><a class="btn">Shop now</a></div><div class="blob"></div></section>'
+        f'<section class="grid">{cards}</section>'
+    )
+
+
+def shopify_home(store: StoreBaseline, products: list[dict[str, Any]] | None = None) -> str:
     theme = {"name": store.theme, "id": 140000000000, "schema_name": store.theme, "theme_store_id": 887, "role": "main"}
     shop_var = (
         "<script>var Shopify = Shopify || {};\n"
@@ -118,7 +147,7 @@ def shopify_home(store: StoreBaseline) -> str:
         f'<!doctype html><html class="no-js" lang="{store.language}"><head>{_shared_head(store)}'
         f'<link rel="preconnect" href="https://cdn.shopify.com" crossorigin>{shop_var}'
         f'<script src="//{store.domain}/cdn/shop/t/12/assets/global.js" defer></script>{techs}</head>'
-        f'<body class="gradient"><h1>{h.escape(store.name)}</h1>{_footer(store)}</body></html>'
+        f'<body class="gradient">{_storefront_body(store, products)}{_footer(store)}</body></html>'
     )
 
 
@@ -135,7 +164,10 @@ def other_platform_home(store: StoreBaseline) -> str:
         if store.platform != "none"
         else ""
     )
-    return f'<!doctype html><html lang="{store.language}"><head>{_shared_head(store)}{techs}</head>{marker}<h1>{h.escape(store.name)}</h1></body></html>'
+    body = (
+        _storefront_body(store) if store.platform != "none" else f"<h1>{h.escape(store.name)}</h1><p>Coming soon.</p>"
+    )
+    return f'<!doctype html><html lang="{store.language}"><head>{_shared_head(store)}{techs}</head>{marker}{body}</body></html>'
 
 
 def shopify_product_json(p: dict[str, Any], store: StoreBaseline) -> dict[str, Any]:

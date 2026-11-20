@@ -26,6 +26,7 @@ class StoreBaseline(BaseModel):
     technologies: list[str]
     social: dict[str, str]
     products: list[dict[str, Any]]
+    pages: list[dict[str, Any]] = []  # Meta-pagina's met hun ads op dag 0
     platform: str = "shopify"
     launch_day: int = 0  # dag (t.o.v. day0) waarop een nog-niet-ontdekte winkel live gaat
 

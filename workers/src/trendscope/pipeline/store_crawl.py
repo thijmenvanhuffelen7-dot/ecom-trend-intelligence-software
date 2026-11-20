@@ -250,6 +250,7 @@ def crawl_store(
 
         # Nieuwe producten koppelen aan bestaande productclusters (titel-trigram; embeddings in fase 4)
         matched = 0
+        matched_clusters: set[int] = set()
         for pid, title in new_ids:
             cluster_id = _match_cluster(cur, title)
             if cluster_id is None:
@@ -265,6 +266,10 @@ def crawl_store(
                    ON CONFLICT (from_type, from_id, to_type, to_id, link_type) DO UPDATE SET last_seen = EXCLUDED.last_seen""",
                 (store_id, cluster_id, Jsonb({"product_id": pid, "method": "title"}), now, now),
             )
+            matched_clusters.add(cluster_id)
+
+        # Gesorteerd bijwerken: parallelle crawls vergrendelen clusters zo in dezelfde volgorde (geen deadlocks)
+        for cluster_id in sorted(matched_clusters):
             cur.execute(
                 """UPDATE product_clusters SET store_count = (
                      SELECT count(DISTINCT p.store_id) FROM cluster_members m JOIN products p ON p.id = m.product_id

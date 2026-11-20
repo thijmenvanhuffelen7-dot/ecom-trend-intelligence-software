@@ -48,36 +48,60 @@ export type WorkspaceRole = "admin" | "member" | "owner";
 export interface Ads {
   advertiser_id: Int8 | null;
   body: string | null;
+  content_hash: string | null;
   countries: Generated<string[]>;
+  creative_hash: string | null;
   cta: string | null;
   end_date: string | null;
   est_reach: Json | null;
   est_spend: Json | null;
+  eu_reach: Int8 | null;
   external_id: string;
   first_seen: Generated<Timestamp>;
   format: string | null;
   headline: string | null;
   id: Generated<Int8>;
+  impressions_high: Int8 | null;
+  impressions_low: Int8 | null;
   is_active: Generated<boolean>;
+  landing_domain: string | null;
   landing_url: string | null;
   languages: Generated<string[]>;
   last_seen: Generated<Timestamp>;
+  link_caption: string | null;
+  link_description: string | null;
+  media: Generated<Json>;
   media_urls: Generated<string[]>;
   ocr_text: string | null;
   platform: AdPlatform;
+  publisher_platforms: Generated<string[]>;
+  snapshot_url: string | null;
+  source_connector: string | null;
   start_date: string | null;
+  target_ages: string | null;
+  target_gender: string | null;
   thumbnail_url: string | null;
   transcript: string | null;
   variants_count: Generated<number>;
 }
 
 export interface Advertisers {
+  active_ads: Generated<number>;
+  avatar_url: string | null;
+  country: string | null;
+  eu_reach_total: Generated<Int8>;
   external_id: string;
+  first_ad_at: string | null;
   first_seen: Generated<Timestamp>;
   id: Generated<Int8>;
+  last_crawled: Timestamp | null;
   name: string;
+  new_ads_7d: Generated<number>;
+  page_url: string | null;
   platform: AdPlatform;
   store_id: Int8 | null;
+  total_ads: Generated<number>;
+  verified: boolean | null;
 }
 
 export interface AlertEvents {
@@ -123,6 +147,27 @@ export interface AuditLogs {
   target_id: string | null;
   target_type: string | null;
   workspace_id: string | null;
+}
+
+export interface BoardItems {
+  added_at: Generated<Timestamp>;
+  added_by: string | null;
+  board_id: string;
+  entity_id: Int8;
+  entity_type: EntityType;
+  note: string | null;
+  tags: Generated<string[]>;
+}
+
+export interface Boards {
+  color: string | null;
+  created_at: Generated<Timestamp>;
+  created_by: string | null;
+  description: string | null;
+  id: Generated<string>;
+  name: string;
+  updated_at: Generated<Timestamp>;
+  workspace_id: string;
 }
 
 export interface ClusterMembers {
@@ -177,6 +222,17 @@ export interface CrawlTargets {
   next_run_at: Generated<Timestamp>;
   priority: Generated<number>;
   target: string;
+}
+
+export interface CreativeAssets {
+  bytes: number;
+  content_type: string;
+  fetched_at: Generated<Timestamp>;
+  height: number | null;
+  sha256: string;
+  source_url: string | null;
+  storage_key: string;
+  width: number | null;
 }
 
 export interface Creators {
@@ -481,10 +537,13 @@ export interface DB {
   alert_rules: AlertRules;
   api_keys: ApiKeys;
   audit_logs: AuditLogs;
+  board_items: BoardItems;
+  boards: Boards;
   cluster_members: ClusterMembers;
   connectors: Connectors;
   crawl_jobs: CrawlJobs;
   crawl_targets: CrawlTargets;
+  creative_assets: CreativeAssets;
   creators: Creators;
   curated_list_items: CuratedListItems;
   curated_lists: CuratedLists;

@@ -71,3 +71,12 @@ def reindex_search() -> dict[str, int]:
     from trendscope.search.indexer import reindex_all
 
     return reindex_all()
+
+
+@app.task(name="trendscope.screenshots")
+def screenshots() -> dict[str, int]:
+    from trendscope.media.screenshots import capture_store_screenshots
+
+    settings = get_settings()
+    with psycopg.connect(settings.database_url) as conn:
+        return dict(capture_store_screenshots(conn, settings, now=datetime.now(UTC)))

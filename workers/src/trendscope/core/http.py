@@ -7,6 +7,7 @@ Bewust níet aanwezig: CAPTCHA-solvers, login-omzeiling of fingerprint-spoofing.
 
 from __future__ import annotations
 
+import re
 import time
 import urllib.robotparser
 from collections.abc import Callable
@@ -20,6 +21,13 @@ import httpx
 from trendscope.core.ratelimit import DomainRateLimiter
 
 RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+_SECRET_PARAM = re.compile(r"(?i)((?:access_token|client_secret|token|key|signature)=)[^&\s\"']+")
+
+
+def redact(text: str) -> str:
+    """Verwijdert tokens uit URL's en foutmeldingen voordat ze gelogd of opgeslagen worden."""
+    return _SECRET_PARAM.sub(r"\1***", text)
 
 
 class RateLimiter(Protocol):
@@ -131,21 +139,44 @@ class PoliteHttpClient:
                 pass
         return float(self.backoff_base * (2**attempt))
 
-    def get(self, url: str, etag: str | None = None, last_modified: str | None = None) -> FetchResult:
-        if not self.is_allowed(url):
-            raise RobotsDisallowed(url)
-        headers: dict[str, str] = {}
+    def get(
+        self, url: str, etag: str | None = None, last_modified: str | None = None, headers: dict[str, str] | None = None
+    ) -> FetchResult:
+        h: dict[str, str] = dict(headers or {})
         if etag:
-            headers["If-None-Match"] = etag
+            h["If-None-Match"] = etag
         if last_modified:
-            headers["If-Modified-Since"] = last_modified
+            h["If-Modified-Since"] = last_modified
+        return self.request("GET", url, headers=h)
 
+    def post(
+        self,
+        url: str,
+        *,
+        json: object | None = None,
+        data: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> FetchResult:
+        """Voor officiële API's die POST vereisen (bv. TikTok Commercial Content API)."""
+        return self.request("POST", url, headers=headers or {}, json=json, data=data)
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: object | None = None,
+        data: dict[str, str] | None = None,
+    ) -> FetchResult:
+        if not self.is_allowed(url):
+            raise RobotsDisallowed(redact(url))
         domain = urlsplit(url).netloc
         last_exc: Exception | None = None
         for attempt in range(self.max_retries + 1):
             self._limiter.acquire(domain)
             try:
-                resp = self._client.get(url, headers=headers)
+                resp = self._client.request(method, url, headers=headers, json=json, data=data)
             except httpx.TransportError as exc:
                 last_exc = exc
                 self._sleep(self.backoff_base * (2**attempt))
@@ -155,6 +186,10 @@ class PoliteHttpClient:
             if resp.status_code in RETRY_STATUSES and attempt < self.max_retries:
                 self._sleep(self._retry_after(resp, attempt))
                 continue
-            resp.raise_for_status()
+            if resp.is_error:
+                # Zonder de URL in de foutmelding: die kan een access token bevatten
+                raise httpx.HTTPStatusError(
+                    f"HTTP {resp.status_code} bij {method} {redact(url)}", request=resp.request, response=resp
+                )
             return FetchResult(str(resp.url), resp.status_code, resp.content, resp.headers)
-        raise last_exc or RuntimeError(f"Ophalen mislukt na {self.max_retries} pogingen: {url}")
+        raise last_exc or RuntimeError(f"Ophalen mislukt na {self.max_retries} pogingen: {redact(url)}")

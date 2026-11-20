@@ -26,7 +26,7 @@ def world():
         yield conn, get_client(), settings
 
 
-def _target(conn, where="TRUE"):
+def _target(conn, where="t.connector_id = 'shopify_storefront'"):
     return conn.execute(
         f"SELECT t.id, t.target, t.entity_id FROM crawl_targets t WHERE {where} ORDER BY t.id LIMIT 1"
     ).fetchone()
@@ -86,7 +86,7 @@ def test_failures_back_off_and_end_in_dead_letter(world):
     from trendscope.scheduler.runner import run_target
 
     conn, ch, settings = world
-    tid, _, _ = _target(conn, "t.id = (SELECT max(id) FROM crawl_targets)")
+    tid, _, _ = _target(conn, "t.id = (SELECT max(id) FROM crawl_targets WHERE connector_id = 'shopify_storefront')")
 
     def broken(request):
         raise httpx.ConnectError("down", request=request)
@@ -133,7 +133,8 @@ def test_discovery_finds_new_stores_and_rejects_non_shops(world):
     )
     assert platforms == {"shopify": 14, "woocommerce": 3, "magento": 1, "bigcommerce": 1, "wix": 1}
     targets = conn.execute(
-        "SELECT count(*) FROM crawl_targets t JOIN stores s ON s.id = t.entity_id WHERE s.data_source = 'crawl'"
+        """SELECT count(*) FROM crawl_targets t JOIN stores s ON s.id = t.entity_id
+           WHERE t.entity_type = 'store' AND t.connector_id = 'shopify_storefront' AND s.data_source = 'crawl'"""
     ).fetchone()
     assert targets == (14,), "alleen Shopify-winkels krijgen een storefront-crawl"
     again = discover_and_probe(conn, settings, now=day_timestamp(14), transport=MockWebTransport(day=14))

@@ -1,19 +1,19 @@
 "use client";
 
-import { Crown, Flame, Gem, Rocket, Sparkles, Store, TrendingUp, type LucideIcon } from "lucide-react";
+import { Crown, Flame, Gem, PlayCircle, Rocket, Sparkles, Store, TrendingUp, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUpdateParams } from "./use-params";
 
-const ICONS: Record<string, LucideIcon> = { sparkles: Sparkles, gem: Gem, "trending-up": TrendingUp, crown: Crown, flame: Flame, rocket: Rocket };
+const ICONS: Record<string, LucideIcon> = { play: PlayCircle, store: Store, sparkles: Sparkles, gem: Gem, "trending-up": TrendingUp, crown: Crown, flame: Flame, rocket: Rocket };
 
-export function SavedViews({ views, allLabel }: { views: { slug: string; label: string; icon: string | null }[]; allLabel: string }) {
+export function SavedViews({ views, allLabel, allIcon = "store" }: { views: { slug: string; label: string; icon: string | null; count?: number }[]; allLabel: string; allIcon?: string }) {
   const { update, searchParams } = useUpdateParams();
   const current = searchParams.get("view");
-  const items = [{ slug: null as string | null, label: allLabel, icon: "store" }, ...views];
+  const items: { slug: string | null; label: string; icon: string | null; count?: number }[] = [{ slug: null, label: allLabel, icon: allIcon }, ...views];
   return (
     <div className="flex items-center justify-center gap-1.5 overflow-x-auto px-1 py-1">
       {items.map((v) => {
-        const Icon = v.icon === "store" ? Store : (ICONS[v.icon ?? ""] ?? Gem);
+        const Icon = ICONS[v.icon ?? ""] ?? Gem;
         const active = current === v.slug || (!current && v.slug === null);
         return (
           <button
@@ -26,6 +26,7 @@ export function SavedViews({ views, allLabel }: { views: { slug: string; label: 
           >
             <Icon className={cn("size-4", active ? "text-accent" : "text-accent/80")} />
             {v.label}
+            {v.count !== undefined && <span className="tabular text-xs text-fg-subtle">{v.count}</span>}
           </button>
         );
       })}

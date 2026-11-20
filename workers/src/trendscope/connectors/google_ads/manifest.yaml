@@ -1,0 +1,14 @@
+id: google_ads_transparency
+display_name: Google Ads Transparency Center (BigQuery)
+kind: official_api
+legal_basis_doc: docs/sources/google_ads_transparency.md
+legal_review: pending
+respects_robots_txt: false
+default_rate_limit:
+  per_domain_rps: 0.2
+  global_rps: 0.2
+requires_credentials: [GOOGLE_APPLICATION_CREDENTIALS]
+personal_data: none
+retention_days: 730
+freshness_sla_hours: 48
+module: null

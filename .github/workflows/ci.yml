@@ -15,6 +15,10 @@ env:
   REDIS_URL: redis://localhost:6379/0
   MEILISEARCH_URL: http://localhost:7700
   MEILISEARCH_MASTER_KEY: ci-master-key
+  S3_ENDPOINT: http://localhost:9002
+  S3_BUCKET: trendscope-ci
+  S3_ACCESS_KEY_ID: ci
+  S3_SECRET_ACCESS_KEY: ci-secret
   AUTH_MODE: dev
   AUTH_SECRET: ci-only-secret-0123456789abcdef0123456789
   DATA_MODE: mock
@@ -79,8 +83,12 @@ jobs:
       - name: Postgres-migraties (up, down, up — down-migraties moeten werken)
         run: |
           pnpm db:migrate
-          for i in 1 2 3 4 5; do pnpm db:rollback; done
+          for i in 1 2 3 4 5 6; do pnpm db:rollback; done
           pnpm db:migrate
+      - name: S3-compatibele testserver (moto)
+        run: |
+          uvx --from 'moto[server]==5.1.4' moto_server -p 9002 > /tmp/moto.log 2>&1 &
+          for i in $(seq 1 30); do curl -s localhost:9002 >/dev/null && break; sleep 1; done
       - name: ClickHouse-migraties + integratietests (pipeline, discovery, scheduler, Redis-limiter)
         working-directory: workers
         run: |

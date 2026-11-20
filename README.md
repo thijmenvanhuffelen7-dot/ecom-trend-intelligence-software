@@ -2,7 +2,7 @@
 
 Trendscope is een all-in-one platform voor e-commerce trend- en concurrentie-intelligentie. Het koppelt producten, winkels, advertenties, creators, zoektrends en leveranciers aan elkaar. Elk product krijgt een **groeisnelheid**, een **validatiescore**, een **saturatiescore** en een **opportuniteitsscore**, en het platform laat altijd zien *waarom* een product zo scoort.
 
-> **Status: fase 2 is klaar (store intelligence).** De crawler, diff-detectie, scheduler, discovery en het freshness-dashboard draaien op een deterministisch "nep-internet", met precies de productiecode die straks echte winkels crawlt.
+> **Status: fase 3 is klaar (ad intelligence).** Connectors voor Meta Ad Library, TikTok Commercial Content API en Google Ads Transparency (BigQuery), koppeling van ads aan winkels en producten, schattingen met bandbreedte, creatives en winkelscreenshots in S3, en een swipe-file met boards. Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de officiële API's aanroept.
 > Architectuurplan: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Onderzoek naar de UX van TrendTrack: [`docs/research/trendtrack-ux.md`](docs/research/trendtrack-ux.md).
 
 | Shop Explorer | Winkeldetail |
@@ -23,7 +23,7 @@ Trendscope is een all-in-one platform voor e-commerce trend- en concurrentie-int
 make setup          # pnpm install + uv sync + .env aanmaken uit .env.example
 make dev-services   # Postgres (pgvector), ClickHouse, Redis, Meilisearch, MinIO, Mailpit
 make migrate        # Postgres- en ClickHouse-migraties
-make seed           # demowereld + 14 dagen gesimuleerde crawls & discovery + zoekindex (±2 min)
+make seed           # demowereld + 14 dagen crawls, ads & discovery + screenshots + zoekindex (±4 min)
 make dev            # http://localhost:3000
 make worker         # (optioneel) Celery: scheduler + crawls draaien continu op de achtergrond
 ```
@@ -40,11 +40,45 @@ Log in met elk e-mailadres; in dev-modus is geen wachtwoord nodig. Daarna volgt 
 |---|---|---|
 | `AUTH_SECRET` | nu | Ondertekent de dev-sessiecookie (min. 32 tekens) |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET` | productie | Clerk-auth (Google, magic link, 2FA, organisaties); zet `AUTH_MODE=clerk` |
-| `META_AD_LIBRARY_ACCESS_TOKEN` | fase 3 | Meta Ad Library API (geverifieerd Meta-account nodig) |
+| `META_AD_LIBRARY_ACCESS_TOKEN` | live ads | Meta Ad Library API (geverifieerd Meta-account + akkoord met de API-voorwaarden) |
+| `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | live ads | TikTok Commercial Content API (toegang via aanvraag) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | live ads | BigQuery (Google Ads Transparency-dataset) |
+| `CHROME_PATH` | optioneel | Chromium voor Playwright-screenshots |
 | `ANTHROPIC_API_KEY` | fase 9 | AI-assistent en rapporten |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | fase 10 | Billing |
 
 ---
+
+## Wat er in fase 3 gebouwd is (ad intelligence)
+
+- **Connectors** voor officiële bronnen, elk met een eigen manifest en juridische notitie in [`docs/sources/`](docs/sources/):
+  - **Meta Ad Library API** (`ads_archive`): adverteerders volgen per pagina en nieuwe adverteerders vinden via zoektermen, incrementeel en met paginering. Het access token wordt nooit opgeslagen of gelogd.
+  - **TikTok Commercial Content API**: OAuth (client credentials), paginering via `search_id`, video's/beelden en bereikbandbreedtes.
+  - **Google Ads Transparency** via de publieke BigQuery-dataset, met een kostenlimiet per query.
+- **Ingest** (`ads/ingest.py`):
+  - events: gestart, gestopt, nieuwe adverteerder en **opschalend** (een creative krijgt varianten bij);
+  - snapshots alleen bij een wijziging;
+  - **varianten** herkend als dezelfde creative;
+  - **schattingen** van bereik en spend, altijd met bandbreedte, betrouwbaarheid en methode.
+- **Koppeling** ad → winkel (landingsdomein; voor TikTok en Google op naam) en ad → product (exact via `/products/<handle>`, anders via de tekst). Onbekende domeinen worden discovery-kandidaten. Ads verschijnen ook in de winkeltijdlijn.
+- **Media**:
+  - content-addressed opslag in S3;
+  - **winkelscreenshots** via Playwright;
+  - een mediaproxy die alleen aan ingelogde gebruikers serveert;
+  - het kopiëren van Meta-creatives staat uit tot er juridisch akkoord is.
+- **UI**:
+  - de Ads-explorer met de weergaven *Lang lopend*, *Schalend*, *Nieuw deze week* en *Nieuwe adverteerders*, plus een platformfilter;
+  - een **ad-detailpagina** met varianten, gekoppelde producten en het bereik door de tijd;
+  - een **adverteerderprofiel** met actieve ads door de tijd, landen, formaten en top-producten;
+  - **Boards** (swipe-file) met opslaan vanuit elke ad, notities, tags en tagfilter, afgeschermd per workspace.
+
+| Kwaliteit | Resultaat |
+|---|---|
+| Python-tests | 59, waarvan 12 integratietests |
+| Unit-tests web | 29 |
+| Playwright e2e-tests | 20 |
+
+Zie [ADR 0003](docs/adr/0003-fase-3-ad-intelligence.md).
 
 ## Wat er in fase 2 gebouwd is (store intelligence)
 
@@ -130,18 +164,21 @@ Zie [ADR 0002](docs/adr/0002-fase-2-store-intelligence.md) en [`docs/sources/`](
 ## Bekende beperkingen
 
 - **Alle data is fictief** (label "Demodata"). In mock-modus crawlt de pipeline een nep-internet. Echte winkels crawlen vereist `DATA_MODE=live` **én** `legal_review: approved` in het connector-manifest. In productie weigert de scheduler connectors zonder akkoord.
-- **Verkeer en omzet van ontdekte winkels** tonen we als "—". Daarvoor is een datapartner nodig (clickstream). Ook winkelscreenshots ontbreken nog: er staat een merk-tegel in de plaats.
+- **Verkeer en omzet van ontdekte winkels** tonen we als "—". Daarvoor is een datapartner nodig (clickstream).
+- **Ad-dekking volgt de bronnen:** Meta alleen ads met EU-levering, Google alleen EER/Turkije, en TikTok-toegang mogelijk alleen voor onderzoek (juridisch toetsen).
+- **Creatives van Meta** komen alleen uit snapshots. Dat staat in productie uit (`META_SNAPSHOT_CAPTURE=false`) tot er juridisch akkoord is.
+- **Video-transcriptie, OCR en hook-analyse** komen in fase 9.
+- **Lokale S3:** Docker Hub publiceert geen MinIO-images meer, dus compose gebruikt `quay.io/minio/minio`.
 - **Productmatching** werkt op titel (trigram). Beeld- en tekst-embeddings komen in fase 4.
 - **Clerk** is geïmplementeerd maar zonder echte keys niet getest.
 - Er zijn nog geen deploy-workflows (Vercel/Hetzner) en geen Terraform.
 - Afwijkingen van het oorspronkelijke plan staan in [`docs/adr/0001-fase-1-keuzes.md`](docs/adr/0001-fase-1-keuzes.md).
 
-## Volgende stap: fase 3 (Ad intelligence)
+## Volgende stap: fase 4 (productdatabase en clustering)
 
-- Een Meta Ad Library API-connector (EU-dekking), daarna TikTok en Google.
-- Ads koppelen aan winkels via landingspagina's, en aan producten.
-- Swipe-file en boards.
-- Creative-opslag in S3, plus winkelscreenshots.
+- Productclustering met beeld (perceptual hash + CLIP-embeddings in pgvector) en tekst.
+- Marktplaatsbronnen: AliExpress (Affiliate API), Amazon, CJ en Temu, met juridische toets per bron.
+- Leveranciersvinder en een uitgebreide margecalculator.
 
 ## Structuur
 

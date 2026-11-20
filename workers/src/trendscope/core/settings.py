@@ -29,6 +29,37 @@ class Settings(BaseSettings):
     # Discovery: zoektermen voor Certificate Transparency (crt.sh)
     discovery_keywords: list[str] = ["shop", "store", "beauty", "skin", "pets", "home", "fit", "baby", "wear"]
 
+    # Ad intelligence (fase 3) — secrets alleen via de omgeving, nooit in de repo
+    meta_ad_library_access_token: str = ""
+    meta_graph_version: str = "v25.0"
+    meta_countries: list[str] = ["NL", "BE", "DE", "FR", "ES", "IT", "AT", "IE", "DK", "SE", "FI", "PL", "PT"]
+    tiktok_client_key: str = ""
+    tiktok_client_secret: str = ""
+    tiktok_countries: list[str] = ["NL", "DE", "FR"]
+    ads_lookback_days: int = 90  # eerste crawl van een adverteerder
+    # Meta-snapshots zijn JS-pagina's met beeldmateriaal van derden: alleen na juridisch akkoord aanzetten
+    meta_snapshot_capture: bool = False
+    ad_search_terms: list[str] = [
+        "posture",
+        "serum",
+        "blender",
+        "massage",
+        "projector",
+        "lamp",
+        "bottle",
+        "mask",
+        "brush",
+        "tracker",
+    ]
+
+    # Media-opslag (S3-compatibel; lokaal MinIO)
+    s3_endpoint: str = "http://localhost:9002"  # 9000 is ClickHouse native
+    s3_bucket: str = "trendscope-dev"
+    s3_access_key_id: str = "minio"
+    s3_secret_access_key: str = "minio12345"
+    s3_region: str = "auto"
+    chrome_path: str | None = None  # Playwright-browser (screenshots, Meta-snapshots)
+
     # Zoeken
     meilisearch_url: str = "http://localhost:7700"
     meilisearch_master_key: str = "dev-master-key"

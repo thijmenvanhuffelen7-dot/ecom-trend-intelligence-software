@@ -12,9 +12,10 @@ from clickhouse_connect.driver.client import Client as ClickHouse
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from trendscope.ads.runner import AD_CONNECTORS, run_ads_target
 from trendscope.connectors.base import ConnectorNotPermitted, LegalReview, load_manifests
 from trendscope.core.clients import http_client_for
-from trendscope.core.http import RateLimiter
+from trendscope.core.http import RateLimiter, redact
 from trendscope.core.settings import Settings
 from trendscope.pipeline.store_crawl import CrawlOutcome, crawl_store
 from trendscope.scheduler.priority import compute_schedule
@@ -38,8 +39,8 @@ def run_target(
         cur.execute(
             """SELECT t.*, s.monthly_visits, s.visits_growth, s.launched_at,
                       (s.products_added_7d + s.products_removed_7d + s.price_changes_7d) AS changes_7d,
-                      (SELECT count(*) FROM watchlists w WHERE w.entity_type = 'store' AND w.entity_id = t.entity_id) AS watchers
-               FROM crawl_targets t LEFT JOIN stores s ON s.id = t.entity_id WHERE t.id = %s""",
+                      (SELECT count(*) FROM watchlists w WHERE w.entity_type = t.entity_type AND w.entity_id = t.entity_id) AS watchers
+               FROM crawl_targets t LEFT JOIN stores s ON s.id = t.entity_id AND t.entity_type = 'store' WHERE t.id = %s""",
             (target_id,),
         )
         target = cur.fetchone()
@@ -64,11 +65,13 @@ def run_target(
         with http_client_for(manifest, settings, transport=transport, limiter=limiter) as client:
             if manifest.id == "shopify_storefront":
                 outcome = crawl_store(conn, ch, client, int(target["entity_id"]), target["target"], now)
+            elif manifest.id in AD_CONNECTORS:
+                outcome = run_ads_target(conn, ch, client, settings, target, now)
             else:
                 raise UnknownConnector(manifest.id)
     except Exception as exc:  # noqa: BLE001 — elke fout moet in crawl_jobs belanden, niet de worker laten crashen
         conn.rollback()
-        error = f"{type(exc).__name__}: {exc}"[:2000]
+        error = redact(f"{type(exc).__name__}: {exc}")[:2000]
         traceback.print_exc()
 
     duration_ms = int((time.monotonic() - started) * 1000)

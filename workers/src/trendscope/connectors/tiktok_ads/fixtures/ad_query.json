@@ -1,0 +1,22 @@
+{
+  "data": {
+    "ads": [
+      {
+        "ad": {
+          "id": 1781234567890123,
+          "first_shown_date": 20261001,
+          "last_shown_date": 20261020,
+          "status": "active",
+          "status_statement": "",
+          "videos": [{"url": "https://library.tiktok.com/api/v1/cdn/abc.mp4", "cover_image_url": "https://p16.tiktokcdn.com/cover.jpeg"}],
+          "image_urls": [],
+          "reach": {"unique_users_seen": "10K-100K"}
+        },
+        "advertiser": {"business_id": 7123456789012345678, "business_name": "Brightnest", "paid_for_by": "Brightnest B.V."}
+      }
+    ],
+    "has_more": false,
+    "search_id": ""
+  },
+  "error": {"code": "ok", "message": "", "log_id": "20261020"}
+}

@@ -1,0 +1,42 @@
+{
+  "data": [
+    {
+      "id": "1234567890123456",
+      "ad_creation_time": "2026-10-02",
+      "ad_creative_bodies": ["POV: you finally fixed your posture 🙌\n\nCloudPress Posture Corrector — free shipping today only."],
+      "ad_creative_link_captions": ["BRIGHTNEST.NL"],
+      "ad_creative_link_descriptions": ["Gratis verzending · 30 dagen retour"],
+      "ad_creative_link_titles": ["CloudPress Posture Corrector"],
+      "ad_delivery_start_time": "2026-10-02",
+      "ad_snapshot_url": "https://www.facebook.com/ads/archive/render_ad/?id=1234567890123456&access_token=EAAB-SECRET-TOKEN",
+      "page_id": "104512345678901",
+      "page_name": "Brightnest",
+      "publisher_platforms": ["FACEBOOK", "INSTAGRAM"],
+      "languages": ["nl"],
+      "eu_total_reach": 48213,
+      "target_ages": ["25", "65+"],
+      "target_gender": "All",
+      "age_country_gender_reach_breakdown": [{"country": "NL", "age_gender_breakdowns": []}, {"country": "BE", "age_gender_breakdowns": []}],
+      "beneficiary_payers": [{"payer": "Brightnest B.V.", "beneficiary": "Brightnest"}]
+    },
+    {
+      "id": "1234567890123457",
+      "ad_creation_time": "2026-08-14",
+      "ad_creative_bodies": ["Our #1 bestseller is back in stock"],
+      "ad_creative_link_captions": ["brightnest.nl"],
+      "ad_creative_link_titles": ["Aurora Galaxy Star Projector"],
+      "ad_delivery_start_time": "2026-08-14",
+      "ad_delivery_stop_time": "2026-09-30",
+      "ad_snapshot_url": "https://www.facebook.com/ads/archive/render_ad/?id=1234567890123457&access_token=EAAB-SECRET-TOKEN",
+      "page_id": "104512345678901",
+      "page_name": "Brightnest",
+      "publisher_platforms": ["INSTAGRAM"],
+      "languages": ["nl", "en"],
+      "eu_total_reach": 9120,
+      "target_ages": ["18", "44"],
+      "target_gender": "Women",
+      "age_country_gender_reach_breakdown": [{"country": "NL", "age_gender_breakdowns": []}]
+    }
+  ],
+  "paging": {"cursors": {"before": "QVFI", "after": "QVFIUj"}, "next": "https://graph.facebook.com/v25.0/ads_archive?access_token=EAAB-SECRET-TOKEN&after=QVFIUj"}
+}

@@ -28,5 +28,6 @@ export function formatEstimateRange(e: Estimate, locale = "en"): string {
     e.currency
       ? new Intl.NumberFormat(locale, { style: "currency", currency: e.currency, notation: "compact", minimumFractionDigits: 0, maximumFractionDigits: 1 }).format(n)
       : compact(locale).format(n);
-  return `${fmt(e.low)} – ${fmt(e.high)}`;
+  // exacte waarde (bv. Meta eu_total_reach): geen schijnbandbreedte tonen
+  return e.low === e.high ? fmt(e.value) : `${fmt(e.low)} – ${fmt(e.high)}`;
 }

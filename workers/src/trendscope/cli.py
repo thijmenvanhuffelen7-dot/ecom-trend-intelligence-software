@@ -23,6 +23,8 @@ def main() -> None:
     imp = sub.add_parser("import-domains", help="Importeer domeinen (één per regel) als kandidaten")
     imp.add_argument("file")
     sub.add_parser("index-search", help="(Her)indexeer winkels en producten in Meilisearch")
+    shots = sub.add_parser("screenshots", help="Maak screenshots van ontdekte winkels (Playwright → S3)")
+    shots.add_argument("--limit", type=int, default=20)
     args = parser.parse_args()
 
     if args.cmd == "migrate-clickhouse":
@@ -69,6 +71,17 @@ def main() -> None:
         from trendscope.search.indexer import reindex_all
 
         print(json.dumps(reindex_all(), indent=2))
+    elif args.cmd == "screenshots":
+        from datetime import UTC, datetime
+
+        import psycopg
+
+        from trendscope.core.settings import get_settings
+        from trendscope.media.screenshots import capture_store_screenshots
+
+        settings = get_settings()
+        with psycopg.connect(settings.database_url) as conn:
+            print(dict(capture_store_screenshots(conn, settings, now=datetime.now(UTC), limit=args.limit)))
     elif args.cmd == "connectors":
         from trendscope.connectors.base import load_manifests
 

@@ -27,5 +27,6 @@ app.conf.update(
         "scheduler-tick": {"task": "trendscope.tick", "schedule": 60.0},
         "discovery": {"task": "trendscope.discover", "schedule": crontab(minute=15)},
         "search-index": {"task": "trendscope.reindex_search", "schedule": crontab(minute="*/15")},
+        "screenshots": {"task": "trendscope.screenshots", "schedule": crontab(minute=40)},
     },
 )
