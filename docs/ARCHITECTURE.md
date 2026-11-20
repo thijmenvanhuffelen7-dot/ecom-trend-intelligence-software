@@ -1,7 +1,7 @@
 # Architectuurplan — E-commerce Trend & Competitive Intelligence Platform
 
-> Status: **akkoord (aanbevolen opties) · fase 1 gebouwd.** Werknaam: **Trendscope**.
-> Afwijkingen en aanscherpingen tijdens het bouwen: [ADR 0001](adr/0001-fase-1-keuzes.md).
+> Status: **akkoord (aanbevolen opties) · fase 1 en 2 gebouwd.** Werknaam: **Trendscope**.
+> Afwijkingen en aanscherpingen tijdens het bouwen: [ADR 0001](adr/0001-fase-1-keuzes.md), [ADR 0002](adr/0002-fase-2-store-intelligence.md).
 
 ---
 

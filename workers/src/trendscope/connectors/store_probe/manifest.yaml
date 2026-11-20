@@ -1,0 +1,14 @@
+id: store_probe
+display_name: Winkelherkenning (homepage-probe)
+kind: scrape_public
+legal_basis_doc: docs/sources/store_probe.md
+legal_review: pending
+respects_robots_txt: true
+default_rate_limit:
+  per_domain_rps: 0.5
+  global_rps: 20
+requires_credentials: []
+personal_data: none
+retention_days: 730
+freshness_sla_hours: 24
+module: null

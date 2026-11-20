@@ -2,7 +2,7 @@
 
 Trendscope is een all-in-one platform voor e-commerce trend- en concurrentie-intelligentie. Het koppelt producten, winkels, advertenties, creators, zoektrends en leveranciers aan elkaar. Elk product krijgt een **groeisnelheid**, een **validatiescore**, een **saturatiescore** en een **opportuniteitsscore**, en het platform laat altijd zien *waarom* een product zo scoort.
 
-> **Status: fase 1 is klaar.** Architectuur, datamodel, scoring-engine, auth, CI en een complete UI draaien op samenhangende demodata.
+> **Status: fase 2 is klaar (store intelligence).** De crawler, diff-detectie, scheduler, discovery en het freshness-dashboard draaien op een deterministisch "nep-internet", met precies de productiecode die straks echte winkels crawlt.
 > Architectuurplan: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Onderzoek naar de UX van TrendTrack: [`docs/research/trendtrack-ux.md`](docs/research/trendtrack-ux.md).
 
 | Shop Explorer | Winkeldetail |
@@ -23,8 +23,9 @@ Trendscope is een all-in-one platform voor e-commerce trend- en concurrentie-int
 make setup          # pnpm install + uv sync + .env aanmaken uit .env.example
 make dev-services   # Postgres (pgvector), ClickHouse, Redis, Meilisearch, MinIO, Mailpit
 make migrate        # Postgres- en ClickHouse-migraties
-make seed           # demowereld: 180 winkels, 72 productclusters, ±2.400 producten, ±1.500 ads, scores
+make seed           # demowereld + 14 dagen gesimuleerde crawls & discovery + zoekindex (±2 min)
 make dev            # http://localhost:3000
+make worker         # (optioneel) Celery: scheduler + crawls draaien continu op de achtergrond
 ```
 
 Log in met elk e-mailadres; in dev-modus is geen wachtwoord nodig. Daarna volgt een korte onboarding: je kiest je rol, je niches en je landen, en het dashboard past zich daaraan aan.
@@ -44,6 +45,38 @@ Log in met elk e-mailadres; in dev-modus is geen wachtwoord nodig. Daarna volgt 
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | fase 10 | Billing |
 
 ---
+
+## Wat er in fase 2 gebouwd is (store intelligence)
+
+- **Shopify-crawler** (`workers/.../pipeline/store_crawl.py`):
+  - haalt `/products.json` op en valt terug op de sitemap als een winkel die uitschakelt;
+  - haalt bestsellers uit een collectie die de winkel zelf zo markeert, conform robots.txt (`sort_by` is daar verboden);
+  - diff-detectie: nieuw, verwijderd, prijs, vergelijkprijs, voorraad, varianten en titel;
+  - snapshots **alleen bij een wijziging**;
+  - nieuwe producten worden automatisch aan trendclusters gekoppeld.
+- **Detectie** van platform (Shopify, WooCommerce, Magento, BigCommerce, Wix), pixels, apps, e-mail- en reviewtools, betaalmethoden, thema, valuta, taal, land en social-accounts. Elke detectie bewaart bewijs.
+- **Scheduler + Celery**:
+  - adaptief interval: 6 uur, 24 uur of 3 dagen;
+  - prioriteit op basis van watchlists, groei en verkeer;
+  - leases met `SKIP LOCKED`;
+  - retries met backoff en dead letters;
+  - een Redis-rate-limiter die over alle workers heen werkt.
+- **Store discovery**: Certificate Transparency (crt.sh), ad-landingspagina's en CSV-import → probe → nieuwe winkel met een crawl-target.
+- **UI**:
+  - een winkeltijdlijn met filters, 7-dagentellers, de crawlstatus en een "Nu crawlen"-knop;
+  - de weergave "Nieuwe lanceringen", een platformfilter en sorteren op recente wijzigingen;
+  - het freshness-dashboard in Admin: versheid per bron, wachtrij, dead letters, kandidaten en fouten;
+  - **⌘K-zoeken** via Meilisearch (typo-tolerant, met Postgres als terugval);
+  - een activiteitenfeed op Home.
+- **Nep-internet** voor mock-modus (`trendscope.mockweb`): de 180 demowinkels veranderen dag na dag, en er staan 22 onontdekte sites klaar. Zo draait en test de échte pipeline zonder externe toegang.
+
+| Kwaliteit | Resultaat |
+|---|---|
+| Python-tests | 38, waarvan 7 integratietests tegen Postgres, ClickHouse en Redis |
+| Unit-tests web | 28 |
+| Playwright e2e-tests | 14 |
+
+Zie [ADR 0002](docs/adr/0002-fase-2-store-intelligence.md) en [`docs/sources/`](docs/sources/) voor de juridische notities per bron.
 
 ## Wat er in fase 1 gebouwd is
 
@@ -96,19 +129,19 @@ Log in met elk e-mailadres; in dev-modus is geen wachtwoord nodig. Daarna volgt 
 
 ## Bekende beperkingen
 
-- **Alle data is fictief** (label "Demodata"). Echte bronnen volgen per fase en per connector, na juridisch akkoord.
-- **Zoeken** gebeurt nog via Postgres (`ILIKE` + trigram-index). Meilisearch staat klaar in Docker Compose en wordt in fase 2 gekoppeld.
-- **Clerk** is geïmplementeerd maar zonder echte keys niet getest. Uitloggen in Clerk-modus verloopt nog niet via Clerk.
-- De scheduler en Celery-taken zijn nog niet gebouwd (fase 2). De CLI `trendscope crawl` draait één connector handmatig.
-- Er zijn nog geen deploy-workflows (Vercel/Hetzner) en geen Terraform. Die komen zodra er een productieomgeving is.
+- **Alle data is fictief** (label "Demodata"). In mock-modus crawlt de pipeline een nep-internet. Echte winkels crawlen vereist `DATA_MODE=live` **én** `legal_review: approved` in het connector-manifest. In productie weigert de scheduler connectors zonder akkoord.
+- **Verkeer en omzet van ontdekte winkels** tonen we als "—". Daarvoor is een datapartner nodig (clickstream). Ook winkelscreenshots ontbreken nog: er staat een merk-tegel in de plaats.
+- **Productmatching** werkt op titel (trigram). Beeld- en tekst-embeddings komen in fase 4.
+- **Clerk** is geïmplementeerd maar zonder echte keys niet getest.
+- Er zijn nog geen deploy-workflows (Vercel/Hetzner) en geen Terraform.
 - Afwijkingen van het oorspronkelijke plan staan in [`docs/adr/0001-fase-1-keuzes.md`](docs/adr/0001-fase-1-keuzes.md).
 
-## Volgende stap: fase 2 (Store intelligence)
+## Volgende stap: fase 3 (Ad intelligence)
 
-- Echte Shopify-crawler: scheduler met prioriteiten, Celery-taken, dagelijkse snapshots en diff-detectie (nieuwe en verwijderde producten, prijs- en voorraadwijzigingen).
-- Technologiedetectie: thema, apps, pixels en betaalproviders uit de HTML.
-- Store discovery via Certificate Transparency-logs en sitemaps.
-- Meilisearch-indexering en een freshness-dashboard.
+- Een Meta Ad Library API-connector (EU-dekking), daarna TikTok en Google.
+- Ads koppelen aan winkels via landingspagina's, en aan producten.
+- Swipe-file en boards.
+- Creative-opslag in S3, plus winkelscreenshots.
 
 ## Structuur
 

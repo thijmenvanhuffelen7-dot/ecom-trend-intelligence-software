@@ -3,6 +3,31 @@ import { getDb, sql } from "@trendscope/db";
 import type { Phase } from "@trendscope/core";
 import { chQuery } from "../clickhouse";
 
+export async function getActivity(workspaceId: string) {
+  const db = getDb();
+  const watched = await db.selectFrom("watchlists").select("entity_id").where("workspace_id", "=", workspaceId).where("entity_type", "=", "store").execute();
+  const ids = watched.map((w) => Number(w.entity_id));
+  const events = await chQuery<{ store_id: string; type: string; at: string; payload: string }>(
+    `SELECT toString(entity_id) AS store_id, event_type AS type, toString(occurred_at) AS at, payload FROM change_events
+     WHERE entity_type = 'store' AND event_type IN ('product_added', 'price_changed', 'product_removed', 'back_in_stock')
+       ${ids.length ? "AND entity_id IN {ids:Array(UInt64)}" : ""}
+     ORDER BY occurred_at DESC LIMIT 8`,
+    { ids },
+  );
+  const stores = events.length
+    ? await db.selectFrom("stores").select(["id", "name", "domain"]).where("id", "in", [...new Set(events.map((e) => e.store_id))]).execute()
+    : [];
+  return {
+    scope: ids.length ? ("watched" as const) : ("market" as const),
+    events: events.map((e) => ({
+      ...e,
+      at: `${e.at.replace(" ", "T")}Z`,
+      payload: JSON.parse(e.payload) as { title?: string; image?: string | null; price?: number; old?: number; new?: number; pct?: number },
+      store: stores.find((s) => s.id === e.store_id),
+    })),
+  };
+}
+
 export async function getHome(niches: string[]) {
   const db = getDb();
   const nicheFilter = niches.length ? sql`and n.slug = any(${niches}::text[])` : sql``;

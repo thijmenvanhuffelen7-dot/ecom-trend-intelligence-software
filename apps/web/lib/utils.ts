@@ -38,6 +38,12 @@ export function formatDate(d: string | Date | null | undefined, locale = "en"): 
   return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric" }).format(date);
 }
 
+export function formatDateTime(d: string | Date | null | undefined, locale = "en"): string {
+  if (!d) return "—";
+  const date = typeof d === "string" ? new Date(d) : d;
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
 /** "2 jr 3 mnd" / "2 yr 3 mo" */
 export function formatAge(d: string | Date | null | undefined, locale = "en", today = new Date()): string {
   if (!d) return "";
@@ -46,6 +52,10 @@ export function formatAge(d: string | Date | null | undefined, locale = "en", to
   const y = Math.floor(months / 12);
   const m = months % 12;
   const nl = locale.startsWith("nl");
+  if (months <= 0 || (months === 1 && today.getDate() < date.getDate())) {
+    const days = Math.max(0, Math.floor((today.getTime() - date.getTime()) / 86_400_000));
+    return nl ? `${days} ${days === 1 ? "dag" : "dagen"}` : `${days} ${days === 1 ? "day" : "days"}`;
+  }
   const yr = nl ? "jr" : "yr";
   const mo = nl ? "mnd" : "mo";
   if (y === 0) return `${Math.max(m, 0)} ${mo}`;

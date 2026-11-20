@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, BadgeEuro, CalendarDays, Globe, Megaphone, Package, Play, Sparkles, Star, Users } from "lucide-react";
+import { ArrowLeft, BadgeEuro, CalendarDays, Globe, History, Megaphone, Package, Play, Radar, Sparkles, Star, Users } from "lucide-react";
 import { DeltaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EstimateValue } from "@/components/ui/estimate";
@@ -8,12 +8,14 @@ import { Flag, Thumb } from "@/components/ui/misc";
 import { PhaseBadge, ScoreRing } from "@/components/ui/score";
 import { Tabs } from "@/components/ui/tabs";
 import { PeriodChart } from "@/components/shop/period-chart";
+import { Timeline } from "@/components/shop/timeline";
+import { CrawlNowButton } from "@/components/shop/crawl-now";
 import { AreaChart, DonutChart } from "@/components/charts";
 import { WatchButton } from "@/components/watch-button";
 import { requireSession } from "@/lib/auth/server";
 import { getT } from "@/lib/i18n/server";
 import { NICHE_EMOJI } from "@/lib/niches";
-import { cn, daysBetween, formatAge, formatCompact, formatDate, formatMoney, formatNumber } from "@/lib/utils";
+import { cn, daysBetween, formatAge, formatCompact, formatDate, formatDateTime, formatMoney, formatNumber } from "@/lib/utils";
 import { getShop } from "@/server/queries/shop-detail";
 import type { Phase } from "@trendscope/core";
 
@@ -65,6 +67,7 @@ export default async function ShopPage({ params }: { params: Promise<{ id: strin
   if (!data) notFound();
   const { shop } = data;
   const L = t.locale;
+  const canAdmin = session.role !== "member" || session.user.isPlatformAdmin;
   const countryName = new Intl.DisplayNames([L], { type: "region" });
   const languageName = new Intl.DisplayNames([L], { type: "language" });
   const totalVisits = shop.monthly_visits ?? 0;
@@ -257,6 +260,58 @@ export default async function ShopPage({ params }: { params: Promise<{ id: strin
               />
             </CardBody>
           </Card>
+        </div>
+
+        {/* Tijdlijn + crawlstatus (fase 2: store intelligence) */}
+        <div className="grid gap-5 xl:grid-cols-[1.7fr_1fr]">
+          <Card>
+            <CardHeader icon={<History />} title={t("timeline.title")} hint={t("timeline.hint")} />
+            <CardBody>
+              <Timeline events={data.timeline} currency={shop.currency ?? "EUR"} />
+            </CardBody>
+          </Card>
+          <div className="grid content-start gap-5">
+            <Card>
+              <CardHeader title={t("timeline.last7d")} />
+              <CardBody className="grid grid-cols-3 gap-2 text-center">
+                {[
+                  [shop.products_added_7d, t("timeline.added7d"), "text-accent-strong"],
+                  [shop.products_removed_7d, t("timeline.removed7d"), "text-danger"],
+                  [shop.price_changes_7d, t("timeline.prices7d"), "text-info"],
+                ].map(([n, label, cls]) => (
+                  <div key={String(label)} className="rounded-xl bg-bg-subtle py-3">
+                    <p className={cn("tabular text-2xl font-semibold", String(cls))}>{n}</p>
+                    <p className="text-xs text-fg-muted">{label}</p>
+                  </div>
+                ))}
+              </CardBody>
+            </Card>
+            <Card>
+              <CardHeader
+                icon={<Radar />}
+                title={t("crawl.status")}
+                action={canAdmin && data.crawl ? <CrawlNowButton storeId={Number(shop.id)} labels={{ crawlNow: t("crawl.crawlNow"), queued: t("crawl.queued") }} /> : undefined}
+              />
+              <CardBody>
+                <dl className="space-y-2.5 text-sm">
+                  {(
+                    [
+                      [t("crawl.source"), shop.data_source === "crawl" ? t("crawl.crawled") : t("crawl.seed")],
+                      [t("crawl.lastCrawled"), shop.last_crawled ? formatDateTime(shop.last_crawled, L) : t("crawl.never")],
+                      [t("crawl.nextRun"), data.crawl ? formatDateTime(data.crawl.next_run_at, L) : "—"],
+                      [t("crawl.interval"), data.crawl ? t("crawl.hours", { n: Math.round(data.crawl.interval_secs / 3600) }) : "—"],
+                      [t("crawl.bestsellers"), shop.bestseller_source ?? "—"],
+                    ] as const
+                  ).map(([k, v]) => (
+                    <div key={k} className="flex justify-between gap-3">
+                      <dt className="text-fg-muted">{k}</dt>
+                      <dd className="truncate text-right font-medium">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </CardBody>
+            </Card>
+          </div>
         </div>
 
         {/* Producten */}

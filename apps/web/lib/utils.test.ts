@@ -16,6 +16,8 @@ describe("format helpers", () => {
     expect(formatAge("2024-08-12", "en", today)).toBe("2 yr 3 mo");
     expect(formatAge("2024-11-01", "nl", today)).toBe("2 jr");
     expect(formatAge("2026-09-01", "nl", today)).toBe("2 mnd");
+    expect(formatAge("2026-11-12", "nl", today)).toBe("6 dagen");
+    expect(formatAge("2026-10-25", "en", today)).toBe("24 days");
   });
   it("counts days", () => {
     expect(daysBetween("2026-11-01", "2026-11-18")).toBe(17);

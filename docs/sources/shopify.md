@@ -23,3 +23,8 @@
 - Valt systematisch ophalen van publieke catalogi onder de Shopify-voorwaarden en de databankenrichtlijn (sui-generisrecht van de winkel)?
 - Mogen we productafbeeldingen cachen en tonen, of alleen linken?
 - Opt-out-procedure voor winkeleigenaren (verzoek → domein op blokkadelijst).
+
+## Aanvulling fase 2
+- **Bestsellers:** Shopify's standaard robots.txt bevat `Disallow: /collections/*sort_by*`, dus `?sort_by=best-selling` gebruiken we **niet**. In plaats daarvan zoeken we in `/collections.json` naar een collectie die de winkel zelf als bestseller markeert (`best-sellers`, `bestsellers`, `top-sellers`, `most-popular`, `trending`) en nemen we de volgorde uit `/collections/<handle>/products.json`. Een integratietest bewaakt dat de crawler nooit om `sort_by` vraagt.
+- **Terugvalpad:** heeft een winkel `/products.json` uitgeschakeld (404/401/403), dan lezen we `sitemap.xml` → `sitemap_products_*.xml` en daarna per product `/products/<handle>.json`, met een maximum van 60 per run. Bij een onvolledige catalogus melden we geen "verwijderde" producten.
+- **Fixtures:** de testfixtures volgen het gedocumenteerde Shopify-formaat. Echte responses worden pas als fixture vastgelegd na juridisch akkoord.

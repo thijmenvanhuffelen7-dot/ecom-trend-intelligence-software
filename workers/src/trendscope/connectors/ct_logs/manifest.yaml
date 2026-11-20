@@ -1,0 +1,14 @@
+id: ct_logs
+display_name: Certificate Transparency-logs (crt.sh)
+kind: scrape_public
+legal_basis_doc: docs/sources/ct_logs.md
+legal_review: pending
+respects_robots_txt: true
+default_rate_limit:
+  per_domain_rps: 0.2
+  global_rps: 0.2
+requires_credentials: []
+personal_data: none
+retention_days: 365
+freshness_sla_hours: 24
+module: null

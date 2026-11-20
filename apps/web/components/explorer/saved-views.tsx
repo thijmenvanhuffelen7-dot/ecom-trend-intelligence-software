@@ -1,10 +1,10 @@
 "use client";
 
-import { Crown, Flame, Gem, Rocket, Store, TrendingUp, type LucideIcon } from "lucide-react";
+import { Crown, Flame, Gem, Rocket, Sparkles, Store, TrendingUp, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUpdateParams } from "./use-params";
 
-const ICONS: Record<string, LucideIcon> = { gem: Gem, "trending-up": TrendingUp, crown: Crown, flame: Flame, rocket: Rocket };
+const ICONS: Record<string, LucideIcon> = { sparkles: Sparkles, gem: Gem, "trending-up": TrendingUp, crown: Crown, flame: Flame, rocket: Rocket };
 
 export function SavedViews({ views, allLabel }: { views: { slug: string; label: string; icon: string | null }[]; allLabel: string }) {
   const { update, searchParams } = useUpdateParams();

@@ -4,7 +4,7 @@ import type { Phase } from "@trendscope/core";
 import { getDb, sql } from "@trendscope/db";
 import { DeltaBadge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { EmptyState, Flag, Thumb } from "@/components/ui/misc";
+import { EmptyState, Flag, ShopThumb, Thumb } from "@/components/ui/misc";
 import { PhaseBadge, ScoreRing } from "@/components/ui/score";
 import { requireSession } from "@/lib/auth/server";
 import { getT } from "@/lib/i18n/server";
@@ -23,8 +23,8 @@ export default async function BrandtrackerPage() {
       .innerJoin("stores as s", "s.id", "w.entity_id")
       .select([
         "s.id", "s.name", "s.domain", "s.country", "s.screenshot_url", "s.monthly_visits", "s.visits_growth", "s.live_ads", "s.ads_growth_30d", "w.created_at",
-        sql<number>`(select count(*)::int from products p where p.store_id = s.id and p.first_seen >= now() - interval '7 days')`.as("new_products"),
-        sql<number>`(select count(*)::int from ads a join advertisers adv on adv.id = a.advertiser_id where adv.store_id = s.id and a.start_date >= current_date - 7)`.as("new_ads"),
+        "s.products_added_7d as new_products",
+        "s.price_changes_7d",
       ])
       .where("w.workspace_id", "=", session.workspace.id)
       .where("w.entity_type", "=", "store")
@@ -72,7 +72,7 @@ export default async function BrandtrackerPage() {
               {stores.map((s) => (
                 <Link key={s.id} href={`/explorer/shops/${s.id}`} className="rounded-2xl border border-border bg-surface p-4 shadow-sm transition hover:shadow-md">
                   <div className="flex items-center gap-3">
-                    <Thumb src={s.screenshot_url} alt={s.name ?? ""} className="h-12 w-20" rounded="rounded-lg" />
+                    <ShopThumb src={s.screenshot_url} name={s.name || s.domain} className="h-12 w-20" rounded="rounded-lg" />
                     <div className="min-w-0">
                       <p className="truncate font-semibold">
                         {s.name} <Flag country={s.country} className="text-[13px]" />
@@ -84,8 +84,8 @@ export default async function BrandtrackerPage() {
                     {[
                       [t("shops.col.visits"), formatCompact(s.monthly_visits, L), s.visits_growth],
                       [t("shops.liveAds"), formatNumber(s.live_ads, L), s.ads_growth_30d],
-                      ["+ " + t("explorer.ads").toLowerCase() + " 7d", String(s.new_ads), null],
                       ["+ " + t("explorer.products").toLowerCase() + " 7d", String(s.new_products), null],
+                      [t("timeline.prices7d") + " 7d", String(s.price_changes_7d), null],
                     ].map(([k, v, d]) => (
                       <div key={String(k)} className="rounded-xl bg-bg-subtle px-1 py-2.5">
                         <p className="tabular text-[15px] font-semibold">{v}</p>

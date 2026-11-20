@@ -12,6 +12,7 @@ from typing import Any, ClassVar
 import yaml
 from pydantic import BaseModel, Field
 
+from trendscope.core.http import PoliteHttpClient
 from trendscope.core.settings import Settings
 
 CONNECTORS_DIR = Path(__file__).parent
@@ -52,7 +53,7 @@ class Manifest(BaseModel):
     personal_data: PersonalData = PersonalData.none
     retention_days: int = Field(gt=0)
     freshness_sla_hours: int = 24
-    module: str
+    module: str | None = None  # None: alleen configuratie (rate limits, juridische status), geen eigen klasse
 
 
 class ConnectorNotPermitted(Exception):
@@ -71,6 +72,12 @@ class Connector(abc.ABC):
     def fixtures_dir(self) -> Path:
         return CONNECTORS_DIR / self.manifest.id.split("_")[0] / "fixtures"
 
+    def client(self) -> PoliteHttpClient:
+        """Echte netwerktoegang, of in mock-modus het nep-internet (zelfde codepad, zelfde robots-regels)."""
+        from trendscope.core.clients import http_client_for
+
+        return http_client_for(self.manifest, self.settings)
+
     def assert_permitted(self) -> None:
         """Productie draait alleen connectors die juridisch zijn goedgekeurd."""
         if self.settings.is_production and self.manifest.legal_review != LegalReview.approved:
@@ -79,23 +86,19 @@ class Connector(abc.ABC):
             )
 
     @abc.abstractmethod
-    def fetch(self, target: str) -> Iterator[bytes]:
-        """Haalt ruwe payloads op voor een target (live)."""
-
-    @abc.abstractmethod
-    def fetch_mock(self, target: str) -> Iterator[bytes]:
-        """Levert ruwe payloads uit fixtures (mock-modus)."""
+    def fetch(self, target: str, client: PoliteHttpClient) -> Iterator[bytes]:
+        """Haalt ruwe payloads op voor een target."""
 
     @abc.abstractmethod
     def parse(self, target: str, payload: bytes) -> list[Any]:
         """Zet een ruwe payload om in genormaliseerde records."""
 
-    def run(self, target: str) -> list[Any]:
+    def run(self, target: str, client: PoliteHttpClient | None = None) -> list[Any]:
         self.assert_permitted()
-        payloads = self.fetch_mock(target) if self.settings.data_mode == "mock" else self.fetch(target)
         records: list[Any] = []
-        for payload in payloads:
-            records.extend(self.parse(target, payload))
+        with client or self.client() as c:
+            for payload in self.fetch(target, c):
+                records.extend(self.parse(target, payload))
         return records
 
 
@@ -111,6 +114,8 @@ def load_manifests() -> dict[str, Manifest]:
 
 def get_connector(connector_id: str, settings: Settings) -> Connector:
     manifest = load_manifests()[connector_id]
+    if not manifest.module:
+        raise ValueError(f"{connector_id} heeft geen connector-klasse")
     module_name, _, class_name = manifest.module.partition(":")
     cls: type[Connector] = getattr(importlib.import_module(module_name), class_name)
     cls.manifest = manifest

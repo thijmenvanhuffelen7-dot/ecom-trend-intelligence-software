@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Compass, Home, LayoutGrid, LineChart, LogOut, Moon, Radar, Settings, Shield, Sun, Languages } from "lucide-react";
+import { Bell, Compass, Home, LayoutGrid, LineChart, LogOut, Moon, Radar, Search, Settings, Shield, Sun, Languages } from "lucide-react";
+import { CommandPalette } from "./command-palette";
 import { useTransition } from "react";
 import { LogoMark } from "./logo";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -82,6 +83,15 @@ export function Sidebar({ email, theme, isAdmin }: { email: string; theme: "ligh
         ))}
       </nav>
       <div className="flex w-full flex-col items-center gap-1">
+        <CommandPalette>
+          {(open) => (
+            <Tooltip content={`${t("search.open")} · ⌘K`} side="right">
+              <button onClick={open} aria-label={t("search.open")} className="grid size-10 place-items-center rounded-xl text-frame-fg hover:bg-frame-hover hover:text-white">
+                <Search className="size-[18px]" />
+              </button>
+            </Tooltip>
+          )}
+        </CommandPalette>
         {isAdmin && (
           <Tooltip content={t("nav.admin")} side="right">
             <Link href="/admin" className={cn("grid size-10 place-items-center rounded-xl text-frame-fg hover:bg-frame-hover hover:text-white", pathname.startsWith("/admin") && "bg-frame-hover text-white")}>

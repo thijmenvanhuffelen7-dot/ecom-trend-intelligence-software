@@ -48,3 +48,23 @@ export function EmptyState({ icon, title, hint, action }: { icon?: React.ReactNo
 export function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd className="rounded-md border border-border bg-bg-subtle px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">{children}</kbd>;
 }
+
+/** Schermafbeelding van een winkel, of een merk-tegel zolang er nog geen screenshot is. */
+export function ShopThumb({ src, name, color, className, rounded = "rounded-lg" }: { src: string | null | undefined; name: string; color?: string | null; className?: string; rounded?: string }) {
+  if (src) return <Thumb src={src} alt={name} className={className} rounded={rounded} />;
+  if (!color) {
+    let h = 0;
+    for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
+    color = `hsl(${h} 55% 40%)`;
+  }
+  return (
+    <div
+      className={cn("relative grid shrink-0 place-items-center overflow-hidden border border-border", rounded, className)}
+      style={{ background: `linear-gradient(135deg, ${color ?? "var(--accent)"} 0%, color-mix(in oklab, ${color ?? "var(--accent)"} 55%, black) 100%)` }}
+      aria-label={name}
+    >
+      <span className="text-lg font-bold tracking-tight text-white/95">{name.slice(0, 1).toUpperCase()}</span>
+      <span className="absolute inset-x-2 bottom-1.5 h-1 rounded-full bg-white/25" />
+    </div>
+  );
+}

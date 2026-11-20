@@ -12,6 +12,7 @@ import urllib.robotparser
 from collections.abc import Callable
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
+from typing import Protocol
 from urllib.parse import urlsplit
 
 import httpx
@@ -19,6 +20,10 @@ import httpx
 from trendscope.core.ratelimit import DomainRateLimiter
 
 RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+
+class RateLimiter(Protocol):
+    def acquire(self, domain: str) -> None: ...
 
 
 class RobotsDisallowed(Exception):
@@ -38,6 +43,16 @@ class FetchResult:
 
         return json.loads(self.content)
 
+    @property
+    def text(self) -> str:
+        ctype = self.headers.get("content-type", "")
+        charset = ctype.split("charset=")[-1].split(";")[0].strip() if "charset=" in ctype else "utf-8"
+        return self.content.decode(charset or "utf-8", "replace")
+
+    @property
+    def cookies(self) -> set[str]:
+        return {c.split("=", 1)[0].strip() for c in self.headers.get_list("set-cookie")}
+
 
 class PoliteHttpClient:
     def __init__(
@@ -51,13 +66,15 @@ class PoliteHttpClient:
         respect_robots: bool = True,
         transport: httpx.BaseTransport | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        limiter: RateLimiter | None = None,
     ) -> None:
         self.user_agent = user_agent
         self.max_retries = max_retries
         self.backoff_base = backoff_base
         self.respect_robots = respect_robots
         self._sleep = sleep
-        self._limiter = DomainRateLimiter(per_domain_rps, global_rps)
+        # In een cluster van workers geef je een gedeelde (Redis-)limiter mee; anders per proces
+        self._limiter: RateLimiter = limiter or DomainRateLimiter(per_domain_rps, global_rps)
         self._robots: dict[str, urllib.robotparser.RobotFileParser] = {}
         self._client = httpx.Client(
             headers={"User-Agent": user_agent, "Accept-Encoding": "gzip, deflate"},

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Bookmark, ImageIcon, Megaphone, Play, ShoppingBag } from "lucide-react";
 import { DeltaBadge } from "@/components/ui/badge";
-import { Flag, FlagStack, Thumb } from "@/components/ui/misc";
+import { Flag, FlagStack, ShopThumb, Thumb } from "@/components/ui/misc";
 import { Sparkline } from "@/components/ui/sparkline";
 import { Tooltip } from "@/components/ui/tooltip";
 import { getT } from "@/lib/i18n/server";
@@ -20,11 +20,11 @@ function NicheChip({ slug, name }: { slug: string; name: string }) {
   );
 }
 
-function ShopIdentity({ row, locale }: { row: ShopRow; locale: string }) {
+function ShopIdentity({ row, locale, newLabel }: { row: ShopRow; locale: string; newLabel?: string }) {
   return (
     <div className="flex items-center gap-4">
       <div className="relative">
-        <Thumb src={row.screenshot_url} alt={row.name ?? row.domain} className="h-[60px] w-[96px]" rounded="rounded-lg" />
+        <ShopThumb src={row.screenshot_url} name={row.name ?? row.domain} color={row.brand_color} className="h-[60px] w-[96px]" />
         <Flag country={row.country} className="absolute -right-1.5 -bottom-1.5 rounded-full bg-surface p-[1px] text-[14px] shadow-sm" />
       </div>
       <div className="min-w-0">
@@ -41,6 +41,9 @@ function ShopIdentity({ row, locale }: { row: ShopRow; locale: string }) {
         <div className="text-sm whitespace-nowrap text-fg-muted">
           {formatDate(row.launched_at, locale)} · {formatAge(row.launched_at, locale)}
         </div>
+        {newLabel && row.products_added_7d > 0 && (
+          <span className="mt-1 inline-flex h-5 items-center rounded-md bg-accent-soft px-1.5 text-[11px] font-semibold text-accent-strong">{newLabel}</span>
+        )}
       </div>
     </div>
   );
@@ -73,7 +76,7 @@ export async function ShopTable({ rows, nicheNames }: { rows: ShopRow[]; nicheNa
               return (
                 <tr key={row.id} className="group relative border-b border-border transition-colors last:border-0 hover:bg-bg-subtle/60">
                   <td className="px-5 py-4">
-                    <ShopIdentity row={row} locale={t.locale} />
+                    <ShopIdentity row={row} locale={t.locale} newLabel={t("shops.newProducts7d", { count: row.products_added_7d })} />
                   </td>
                   <td className="border-l border-border px-5 py-4">
                     <div className="flex flex-col items-start gap-2">
@@ -157,7 +160,7 @@ export async function ShopCard({ row, nicheNames }: { row: ShopRow; nicheNames: 
   return (
     <Link href={`/explorer/shops/${row.id}`} className="group overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="relative">
-        <Thumb src={row.screenshot_url} alt={row.name ?? row.domain} className="aspect-[16/10] w-full border-0" rounded="rounded-none" />
+        <ShopThumb src={row.screenshot_url} name={row.name ?? row.domain} color={row.brand_color} className="aspect-[16/10] w-full border-0" rounded="rounded-none" />
         <div className="absolute top-3 left-3 flex gap-1.5">
           {row.niches.slice(0, 1).map((n) => (
             <span key={n} className="rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-black shadow-sm backdrop-blur">

@@ -6,7 +6,7 @@ import { AreaChart } from "@/components/charts";
 import { MarginCalculator } from "@/components/product/margin-calculator";
 import { Badge, DeltaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Flag, Thumb } from "@/components/ui/misc";
+import { Flag, ShopThumb, Thumb } from "@/components/ui/misc";
 import { Meter, PhaseBadge, ScoreRing, scoreTone } from "@/components/ui/score";
 import { Tooltip } from "@/components/ui/tooltip";
 import { WatchButton } from "@/components/watch-button";
@@ -252,7 +252,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
               {data.stores.map((s) => (
                 <li key={`${s.id}-${s.price}`}>
                   <Link href={`/explorer/shops/${s.id}`} className="flex items-center gap-3.5 px-5 py-3 transition hover:bg-surface-hover">
-                    <Thumb src={s.screenshot_url} alt={s.name ?? ""} className="h-10 w-16" rounded="rounded-lg" />
+                    <ShopThumb src={s.screenshot_url} name={s.name || s.domain} className="h-10 w-16" rounded="rounded-lg" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold">
                         {s.name} <Flag country={s.country} className="ml-1 text-[13px]" />

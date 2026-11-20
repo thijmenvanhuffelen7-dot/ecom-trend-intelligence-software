@@ -14,7 +14,7 @@ export async function getShop(id: number, workspaceId: string) {
     .executeTakeFirst();
   if (!shop) return null;
 
-  const [tech, bestSellers, latestProducts, ads, linked, watching, metrics] = await Promise.all([
+  const [tech, bestSellers, latestProducts, ads, linked, watching, metrics, timeline, crawl] = await Promise.all([
     db.selectFrom("store_technologies").select(["type", "name", "detected_at"]).where("store_id", "=", shop.id).where("removed_at", "is", null).orderBy("name").execute(),
     db
       .selectFrom("products")
@@ -57,6 +57,17 @@ export async function getShop(id: number, workspaceId: string) {
        WHERE store_id = {id:UInt64} AND date >= today() - 366 ORDER BY metric, date`,
       { id },
     ),
+    chQuery<{ type: string; at: string; payload: string }>(
+      `SELECT event_type AS type, toString(occurred_at) AS at, payload FROM change_events
+       WHERE entity_type = 'store' AND entity_id = {id:UInt64} ORDER BY occurred_at DESC LIMIT 300`,
+      { id },
+    ),
+    db
+      .selectFrom("crawl_targets")
+      .select(["id", "last_run_at", "next_run_at", "interval_secs", "last_status", "failures", "priority"])
+      .where("connector_id", "=", "shopify_storefront")
+      .where("entity_id", "=", shop.id)
+      .executeTakeFirst(),
   ]);
 
   const series = (metric: string) => metrics.filter((m) => m.metric === metric).map((m) => [m.d, Number(m.value)] as [string, number]);
@@ -82,11 +93,27 @@ export async function getShop(id: number, workspaceId: string) {
     ads,
     linked,
     watching: !!watching,
+    timeline: timeline.map((e) => ({ type: e.type, at: `${e.at.replace(" ", "T")}Z`, payload: JSON.parse(e.payload) as TimelinePayload })),
+    crawl: crawl ?? null,
     visits: series("visits"),
     liveAds,
     liveAdsGrowth: { d7: growth(7), d30: growth(30), d90: growth(90) },
     followers: ["instagram", "tiktok", "facebook", "pinterest"].map((net) => ({ net, points: series(`followers_${net}`) })).filter((f) => f.points.some((p) => p[1] > 0)),
   };
 }
+
+export interface TimelinePayload {
+  title?: string;
+  name?: string;
+  image?: string | null;
+  price?: number | null;
+  old?: number | string | null;
+  new?: number | string | null;
+  pct?: number | null;
+  variants?: string[];
+  product_id?: number | null;
+}
+
+export type TimelineEvent = { type: string; at: string; payload: TimelinePayload };
 
 export type ShopDetail = NonNullable<Awaited<ReturnType<typeof getShop>>>;

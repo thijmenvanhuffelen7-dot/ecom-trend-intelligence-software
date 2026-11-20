@@ -12,6 +12,9 @@ concurrency:
 env:
   DATABASE_URL: postgresql://trendscope:trendscope@localhost:5432/trendscope?sslmode=disable
   CLICKHOUSE_URL: http://trendscope:trendscope@localhost:8123/trendscope
+  REDIS_URL: redis://localhost:6379/0
+  MEILISEARCH_URL: http://localhost:7700
+  MEILISEARCH_MASTER_KEY: ci-master-key
   AUTH_MODE: dev
   AUTH_SECRET: ci-only-secret-0123456789abcdef0123456789
   DATA_MODE: mock
@@ -58,6 +61,13 @@ jobs:
         env: { CLICKHOUSE_USER: trendscope, CLICKHOUSE_PASSWORD: trendscope, CLICKHOUSE_DB: trendscope }
         ports: ["8123:8123"]
         options: --health-cmd "wget -qO- http://localhost:8123/ping" --health-interval 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+      meilisearch:
+        image: getmeili/meilisearch:v1.11
+        env: { MEILI_MASTER_KEY: ci-master-key, MEILI_NO_ANALYTICS: "true" }
+        ports: ["7700:7700"]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -69,15 +79,20 @@ jobs:
       - name: Postgres-migraties (up, down, up — down-migraties moeten werken)
         run: |
           pnpm db:migrate
-          for i in 1 2 3 4; do pnpm db:rollback; done
+          for i in 1 2 3 4 5; do pnpm db:rollback; done
           pnpm db:migrate
-      - name: ClickHouse-migraties + seed
+      - name: ClickHouse-migraties + integratietests (pipeline, discovery, scheduler, Redis-limiter)
         working-directory: workers
         run: |
           uv sync --frozen
           uv run trendscope migrate-clickhouse
-          uv run trendscope seed
           RUN_INTEGRATION=1 uv run pytest -q -m integration
+      - name: Demowereld voor e2e (seed + 14 dagen simulatie + zoekindex)
+        working-directory: workers
+        run: |
+          uv run trendscope seed
+          uv run trendscope simulate --days 14
+          uv run trendscope index-search
       - name: Gegenereerde DB-types zijn actueel
         run: |
           pnpm db:codegen

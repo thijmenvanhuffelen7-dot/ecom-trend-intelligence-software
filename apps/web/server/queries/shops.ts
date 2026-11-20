@@ -3,7 +3,9 @@ import { getDb, sql } from "@trendscope/db";
 import { chQuery } from "../clickhouse";
 import { list, num, oneOf, page, range, str, type SearchParams } from "./params";
 
-export const SHOP_SORTS = ["relevance", "visits", "visits_growth", "live_ads", "ads_growth", "newest", "products"] as const;
+export const SHOP_SORTS = ["relevance", "visits", "visits_growth", "live_ads", "ads_growth", "recent_changes", "newest", "products"] as const;
+/** Virtuele weergave: winkels die de afgelopen 7 dagen live gingen of ontdekt werden. */
+export const NEW_LAUNCHES_VIEW = "new-launches";
 export type ShopSort = (typeof SHOP_SORTS)[number];
 export const CREATED_OPTIONS = ["d30", "d90", "y1", "older"] as const;
 export const PAGE_SIZE = 25;
@@ -23,6 +25,7 @@ export interface ShopFilters {
   languages: string[];
   themes: string[];
   currencies: string[];
+  platforms: string[];
   liveAds: { min?: number; max?: number };
   adsGrowthMin?: number;
   sort: ShopSort;
@@ -46,6 +49,7 @@ export function parseShopFilters(sp: SearchParams): ShopFilters {
     languages: list(sp, "lang"),
     themes: list(sp, "theme"),
     currencies: list(sp, "cur"),
+    platforms: list(sp, "platform"),
     liveAds: range(sp, "ads"),
     adsGrowthMin: num(sp, "ag"),
     sort: oneOf(sp, "sort", SHOP_SORTS, "relevance"),
@@ -57,13 +61,15 @@ export function activeFilterCount(f: ShopFilters): number {
   return [
     f.niches.length, f.origin.length, f.visitorCountries.length, f.traffic.min ?? f.traffic.max, f.trafficGrowthMin,
     f.products.min ?? f.products.max, f.created, f.pixels.length, f.apps.length, f.languages.length, f.themes.length,
-    f.currencies.length, f.liveAds.min ?? f.liveAds.max, f.adsGrowthMin,
+    f.currencies.length, f.platforms.length, f.liveAds.min ?? f.liveAds.max, f.adsGrowthMin,
   ].filter((v) => v !== undefined && v !== 0).length;
 }
 
 function baseQuery(f: ShopFilters) {
   let q = getDb().selectFrom("stores as s").leftJoin("niches as n", "n.id", "s.niche_id");
-  if (f.view) {
+  if (f.view === NEW_LAUNCHES_VIEW) {
+    q = q.where((eb) => eb.or([eb("s.launched_at", ">=", sql<string>`current_date - 7`), eb("s.first_seen", ">=", sql<Date>`now() - interval '7 days'`)]));
+  } else if (f.view) {
     q = q.where((eb) =>
       eb.exists(
         eb
@@ -112,6 +118,7 @@ function baseQuery(f: ShopFilters) {
   if (f.languages.length) q = q.where(sql<boolean>`s.languages && ${f.languages}::text[]`);
   if (f.themes.length) q = q.where("s.theme", "in", f.themes);
   if (f.currencies.length) q = q.where("s.currency", "in", f.currencies);
+  if (f.platforms.length) q = q.where(sql<boolean>`s.platform::text = any(${f.platforms}::text[])`);
   if (f.liveAds.min !== undefined) q = q.where("s.live_ads", ">=", f.liveAds.min);
   if (f.liveAds.max !== undefined) q = q.where("s.live_ads", "<=", f.liveAds.max);
   if (f.adsGrowthMin !== undefined) q = q.where("s.ads_growth_30d", ">=", f.adsGrowthMin);
@@ -125,7 +132,7 @@ export async function searchShops(f: ShopFilters) {
   let q = base.select([
     "s.id", "s.name", "s.domain", "s.country", "s.launched_at", "s.monthly_visits", "s.visits_growth", "s.live_ads",
     "s.ads_growth_30d", "s.ads_launched_total", "s.product_count", "s.visitor_countries", "s.screenshot_url", "s.brand_color",
-    "n.slug as niche_slug",
+    "n.slug as niche_slug", "s.products_added_7d", "s.platform",
   ]);
   q = {
     relevance: q.orderBy(sql`(coalesce(s.visits_growth, 0) / 100 + 1) * ln(coalesce(s.monthly_visits, 0) + 10) + ln(s.live_ads + 1)`, "desc"),
@@ -133,6 +140,7 @@ export async function searchShops(f: ShopFilters) {
     visits_growth: q.orderBy("s.visits_growth", sql`desc nulls last`),
     live_ads: q.orderBy("s.live_ads", "desc"),
     ads_growth: q.orderBy("s.ads_growth_30d", sql`desc nulls last`),
+    recent_changes: q.orderBy(sql`s.products_added_7d + s.products_removed_7d + s.price_changes_7d`, "desc"),
     newest: q.orderBy("s.launched_at", sql`desc nulls last`),
     products: q.orderBy("s.product_count", "desc"),
   }[f.sort].orderBy("s.id");
@@ -147,8 +155,10 @@ export async function searchShops(f: ShopFilters) {
       .selectFrom("products")
       .select(["id", "store_id", "title", "images", "price", "currency", "best_seller_rank"])
       .where("store_id", "in", ids)
-      .where("best_seller_rank", "<=", 3)
-      .orderBy("best_seller_rank")
+      .where("status", "<>", "removed")
+      .where((eb) => eb.or([eb("best_seller_rank", "<=", 3), eb("first_seen", ">=", sql<Date>`now() - interval '30 days'`)]))
+      .orderBy(sql`best_seller_rank nulls last`)
+      .orderBy("first_seen", "desc")
       .execute(),
     db
       .selectFrom("products as p")
@@ -182,7 +192,8 @@ export async function searchShops(f: ShopFilters) {
     rows: rows.map((r) => ({
       ...r,
       niches: [...new Set([r.niche_slug, ...secondaryNiches.filter((n) => n.store_id === r.id).map((n) => n.slug)].filter(Boolean) as string[])].slice(0, 2),
-      bestSellers: bestSellers.filter((p) => p.store_id === r.id),
+      // bestsellers; zonder bestseller-collectie de nieuwste producten
+      bestSellers: bestSellers.filter((p) => p.store_id === r.id).slice(0, 3),
       latestAds: latestAds.filter((a) => a.store_id === r.id).slice(0, 3),
       visitsSeries: series.find((s) => s.store_id === r.id && s.metric === "visits")?.values ?? [],
       adsSeries: series.find((s) => s.store_id === r.id && s.metric === "live_ads")?.values ?? [],
@@ -194,7 +205,7 @@ export type ShopRow = Awaited<ReturnType<typeof searchShops>>["rows"][number];
 
 export async function shopFacets() {
   const db = getDb();
-  const [niches, tech, themes, countries, languages, currencies, views, totals] = await Promise.all([
+  const [niches, tech, themes, countries, languages, currencies, views, totals, platforms] = await Promise.all([
     db.selectFrom("niches").select(["slug", "name_nl", "name_en"]).orderBy("name_en").execute(),
     db
       .selectFrom("store_technologies")
@@ -209,6 +220,7 @@ export async function shopFacets() {
     db.selectFrom("stores").select(["currency as value", sql<number>`count(*)::int`.as("count")]).where("currency", "is not", null).groupBy("currency").orderBy("count", "desc").execute(),
     db.selectFrom("curated_lists").select(["slug", "name_nl", "name_en", "icon"]).where("entity_type", "=", "store").orderBy("position").execute(),
     db.selectFrom("stores").select(sql<number>`count(*)::int`.as("n")).executeTakeFirstOrThrow(),
+    db.selectFrom("stores").select([sql<string>`platform::text`.as("value"), sql<number>`count(*)::int`.as("count")]).groupBy("platform").orderBy("count", "desc").execute(),
   ]);
   return {
     niches,
@@ -219,6 +231,7 @@ export async function shopFacets() {
     languages: languages.map((t) => ({ value: t.value, count: t.count })),
     currencies: currencies.map((t) => ({ value: t.value!, count: t.count })),
     views,
+    platforms,
     totalShops: totals.n,
   };
 }

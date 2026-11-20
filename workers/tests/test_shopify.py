@@ -1,13 +1,28 @@
 from decimal import Decimal
+from pathlib import Path
+
+import httpx
 
 from trendscope.connectors.base import get_connector, load_manifests
 from trendscope.connectors.shopify.connector import parse_products_json
+from trendscope.core.http import PoliteHttpClient
 from trendscope.core.settings import Settings
+
+FIXTURE = Path(__file__).parents[1] / "src/trendscope/connectors/shopify/fixtures/products_page1.json"
+
+
+def _fixture_client():
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nDisallow: /collections/*sort_by*\n")
+        return httpx.Response(200, content=FIXTURE.read_bytes())
+
+    return PoliteHttpClient("TestBot/1.0", per_domain_rps=1000, transport=httpx.MockTransport(handler))
 
 
 def test_parse_fixture():
     connector = get_connector("shopify_storefront", Settings(data_mode="mock"))
-    products = connector.run("brightnest.example")
+    products = connector.run("brightnest.example", client=_fixture_client())
     assert len(products) == 2
     p = products[0]
     assert p.title == "CloudPress Posture Corrector"

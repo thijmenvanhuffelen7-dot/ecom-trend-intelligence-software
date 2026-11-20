@@ -146,15 +146,19 @@ export interface Connectors {
 }
 
 export interface CrawlJobs {
+  attempt: Generated<number>;
   connector_id: string;
+  dead_letter: Generated<boolean>;
   duration_ms: number | null;
   error: string | null;
   finished_at: Timestamp | null;
   id: Generated<Int8>;
   items: Generated<number>;
   started_at: Generated<Timestamp>;
+  stats: Generated<Json>;
   status: string;
   target: string | null;
+  target_id: Int8 | null;
 }
 
 export interface CrawlTargets {
@@ -167,6 +171,9 @@ export interface CrawlTargets {
   id: Generated<Int8>;
   interval_secs: Generated<number>;
   last_modified: string | null;
+  last_run_at: Timestamp | null;
+  last_status: string | null;
+  leased_until: Timestamp | null;
   next_run_at: Generated<Timestamp>;
   priority: Generated<number>;
   target: string;
@@ -267,22 +274,28 @@ export interface ProductClusters {
 }
 
 export interface Products {
+  available: Generated<boolean>;
   best_seller_rank: number | null;
   category: string | null;
+  compare_at_price: Numeric | null;
   content_hash: string | null;
   currency: string | null;
   external_id: string;
   first_seen: Generated<Timestamp>;
+  handle: string | null;
   id: Generated<Int8>;
   images: Generated<string[]>;
   last_seen: Generated<Timestamp>;
   price: Numeric | null;
+  published_at: Timestamp | null;
+  removed_at: Timestamp | null;
   source: ProductSource;
   status: Generated<string>;
   store_id: Int8 | null;
   tags: Generated<string[]>;
   title: string;
   url: string | null;
+  variants: Generated<Json>;
   vendor: string | null;
 }
 
@@ -310,12 +323,26 @@ export interface ScoreWeights {
   weights: Json;
 }
 
+export interface StoreCandidates {
+  attempts: Generated<number>;
+  discovered_at: Generated<Timestamp>;
+  domain: string;
+  evidence: Generated<Json>;
+  platform: StorePlatform | null;
+  probed_at: Timestamp | null;
+  source: string;
+  status: Generated<string>;
+  store_id: Int8 | null;
+}
+
 export interface Stores {
   ads_growth_30d: number | null;
   ads_launched_total: Generated<number>;
+  bestseller_source: string | null;
   brand_color: string | null;
   country: string | null;
   currency: string | null;
+  data_source: Generated<string>;
   description: string | null;
   domain: string;
   est_revenue: Json | null;
@@ -324,6 +351,7 @@ export interface Stores {
   id: Generated<Int8>;
   is_active: Generated<boolean>;
   languages: Generated<string[]>;
+  last_change_at: Timestamp | null;
   last_crawled: Timestamp | null;
   launched_at: string | null;
   live_ads: Generated<number>;
@@ -331,8 +359,12 @@ export interface Stores {
   name: string | null;
   niche_id: Int8 | null;
   platform: Generated<StorePlatform>;
+  price_changes_7d: Generated<number>;
   product_count: Generated<number>;
+  products_added_7d: Generated<number>;
+  products_removed_7d: Generated<number>;
   screenshot_url: string | null;
+  shopify_domain: string | null;
   social: Generated<Json>;
   social_followers: Generated<Json>;
   theme: string | null;
@@ -465,6 +497,7 @@ export interface DB {
   products: Products;
   score_weights: ScoreWeights;
   scores: Scores;
+  store_candidates: StoreCandidates;
   store_technologies: StoreTechnologies;
   stores: Stores;
   subscriptions: Subscriptions;

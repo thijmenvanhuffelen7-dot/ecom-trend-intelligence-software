@@ -80,7 +80,10 @@ def test_token_bucket_waits():
 def test_production_blocks_unreviewed_connector():
     connector = get_connector("shopify_storefront", Settings(app_env="production", data_mode="mock"))
     with pytest.raises(ConnectorNotPermitted):
-        connector.run("brightnest.example")
+        connector.run(
+            "brightnest.example",
+            client=PoliteHttpClient("x", transport=httpx.MockTransport(lambda r: httpx.Response(500))),
+        )
 
 
 def test_clickhouse_statement_splitting():

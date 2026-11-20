@@ -1,4 +1,4 @@
-import { AppWindow, CalendarDays, Code2, Coins, Globe, LayoutGrid, LineChart, List, Package, Palette, Rows3, ShoppingBag, Sparkles, Store, TrendingUp, Type, Users } from "lucide-react";
+import { Layers, AppWindow, CalendarDays, Code2, Coins, Globe, LayoutGrid, LineChart, List, Package, Palette, Rows3, ShoppingBag, Sparkles, Store, TrendingUp, Type, Users } from "lucide-react";
 import { ExplorerHeader } from "@/components/explorer/explorer-header";
 import { ClearFilters, MoreFilters, MultiFilter, Pagination, RangeFilter, SelectFilter, SortSelect, ViewToggle } from "@/components/explorer/filters";
 import { SavedViews } from "@/components/explorer/saved-views";
@@ -8,12 +8,12 @@ import { getT } from "@/lib/i18n/server";
 import { requireSession } from "@/lib/auth/server";
 import { NICHE_EMOJI } from "@/lib/niches";
 import { flagEmoji, formatCompact } from "@/lib/utils";
-import { activeFilterCount, PAGE_SIZE, parseShopFilters, searchShops, shopFacets, SHOP_SORTS } from "@/server/queries/shops";
+import { activeFilterCount, NEW_LAUNCHES_VIEW, PAGE_SIZE, parseShopFilters, searchShops, shopFacets, SHOP_SORTS } from "@/server/queries/shops";
 import type { SearchParams } from "@/server/queries/params";
 
 export const metadata = { title: "Shops" };
 
-const FILTER_PARAMS = ["niche", "origin", "vc", "traffic", "tg", "products", "created", "pixels", "apps", "lang", "theme", "cur", "ads", "ag", "q", "view"];
+const FILTER_PARAMS = ["niche", "origin", "vc", "traffic", "tg", "products", "created", "pixels", "apps", "lang", "theme", "cur", "platform", "ads", "ag", "q", "view"];
 
 export default async function ShopsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requireSession();
@@ -43,7 +43,10 @@ export default async function ShopsPage({ searchParams }: { searchParams: Promis
       <div className="space-y-4 bg-bg-subtle/60 px-6 pt-4 pb-6">
         <SavedViews
           allLabel={t("explorer.allShops")}
-          views={facets.views.map((v) => ({ slug: v.slug, label: t.locale === "nl" ? v.name_nl : v.name_en, icon: v.icon }))}
+          views={[
+            { slug: NEW_LAUNCHES_VIEW, label: t("shops.newLaunches"), icon: "sparkles" },
+            ...facets.views.map((v) => ({ slug: v.slug, label: t.locale === "nl" ? v.name_nl : v.name_en, icon: v.icon })),
+          ]}
         />
 
         {/* Filterpaneel */}
@@ -103,7 +106,13 @@ export default async function ShopsPage({ searchParams }: { searchParams: Promis
                 options={facets.languages.map((l) => ({ value: l.value, label: languageName.of(l.value) ?? l.value, count: l.count }))}
               />
               <MultiFilter param="theme" label={t("shops.filter.theme")} icon={<Palette />} options={facets.themes.map((p) => ({ value: p.value, label: p.value, count: p.count }))} />
-              <MoreFilters moreLabel={t("explorer.moreFilters", { count: 2 })} lessLabel={t("explorer.lessFilters")}>
+              <MoreFilters moreLabel={t("explorer.moreFilters", { count: 3 })} lessLabel={t("explorer.lessFilters")}>
+                <MultiFilter
+                  param="platform"
+                  label={t("shops.filter.platform")}
+                  icon={<Layers />}
+                  options={facets.platforms.map((p) => ({ value: p.value, label: p.value[0]!.toUpperCase() + p.value.slice(1), count: p.count }))}
+                />
                 <MultiFilter param="apps" label={t("shops.filter.apps")} icon={<AppWindow />} options={facets.apps.map((p) => ({ value: p.value, label: p.value, count: p.count }))} />
                 <MultiFilter param="cur" label={t("shops.filter.currency")} icon={<Coins />} options={facets.currencies.map((p) => ({ value: p.value, label: p.value, count: p.count }))} />
               </MoreFilters>

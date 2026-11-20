@@ -4,14 +4,14 @@ import { PHASES } from "@trendscope/core";
 import { BarChart } from "@/components/charts";
 import { DeltaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { EmptyState, Flag, Thumb } from "@/components/ui/misc";
+import { EmptyState, Flag, ShopThumb, Thumb } from "@/components/ui/misc";
 import { Meter, PHASE_COLORS, PhaseBadge, ScoreRing } from "@/components/ui/score";
 import { Sparkline } from "@/components/ui/sparkline";
 import { requireSession } from "@/lib/auth/server";
 import { getT } from "@/lib/i18n/server";
 import { NICHE_EMOJI } from "@/lib/niches";
-import { formatCompact, formatMoney, formatNumber } from "@/lib/utils";
-import { getHome } from "@/server/queries/home";
+import { formatCompact, formatDateTime, formatMoney, formatNumber } from "@/lib/utils";
+import { getActivity, getHome } from "@/server/queries/home";
 
 export const metadata = { title: "Home" };
 
@@ -27,7 +27,7 @@ export default async function HomePage() {
   const session = await requireSession();
   const t = await getT();
   const L = t.locale;
-  const data = await getHome(session.workspace.niches);
+  const [data, activity] = await Promise.all([getHome(session.workspace.niches), getActivity(session.workspace.id)]);
   const hour = Number(new Intl.DateTimeFormat("en", { hour: "numeric", hourCycle: "h23", timeZone: "Europe/Amsterdam" }).format(new Date()));
   const greeting = hour < 12 ? t("home.greeting.morning") : hour < 18 ? t("home.greeting.afternoon") : t("home.greeting.evening");
   const name = session.user.name ?? session.user.email.split("@")[0];
@@ -108,7 +108,7 @@ export default async function HomePage() {
               {data.scaling.map((s) => (
                 <li key={s.id}>
                   <Link href={`/explorer/shops/${s.id}`} className="flex items-center gap-3 px-5 py-3 transition hover:bg-surface-hover">
-                    <Thumb src={s.screenshot_url} alt={s.name ?? ""} className="h-9 w-14" rounded="rounded-lg" />
+                    <ShopThumb src={s.screenshot_url} name={s.name || s.domain} className="h-9 w-14" rounded="rounded-lg" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold">
                         {s.name} <Flag country={s.country} className="ml-0.5 text-[12px]" />
@@ -123,8 +123,28 @@ export default async function HomePage() {
             </ul>
           </Card>
           <Card>
-            <CardHeader icon={<Bell />} title={t("nav.alerts")} />
-            <EmptyState title="" hint={t("home.alertsEmpty")} />
+            <CardHeader icon={<Bell />} title={activity.scope === "watched" ? t("activity.watched") : t("activity.market")} />
+            {activity.events.length === 0 ? (
+              <EmptyState title="" hint={t("home.alertsEmpty")} />
+            ) : (
+              <ul className="divide-y divide-border border-t border-border">
+                {activity.events.map((e, i) => (
+                  <li key={i}>
+                    <Link href={`/explorer/shops/${e.store_id}`} className="flex items-center gap-3 px-5 py-2.5 transition hover:bg-surface-hover">
+                      <Thumb src={e.payload.image} alt="" className="size-9" rounded="rounded-lg" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{e.payload.title}</p>
+                        <p className="truncate text-xs text-fg-muted">
+                          {e.store?.name} · {t(`timeline.events.${e.type as "product_added"}`)}
+                        </p>
+                      </div>
+                      {e.type === "price_changed" ? <DeltaBadge value={e.payload.pct} /> : null}
+                      <time className="shrink-0 text-xs text-fg-subtle">{formatDateTime(e.at, L)}</time>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </div>
 

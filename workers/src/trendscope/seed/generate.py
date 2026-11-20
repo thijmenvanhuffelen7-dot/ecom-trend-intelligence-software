@@ -21,6 +21,7 @@ from psycopg.types.json import Jsonb
 from trendscope.connectors.base import load_manifests
 from trendscope.core.clickhouse import get_client
 from trendscope.core.settings import get_settings
+from trendscope.mockweb.baseline import StoreBaseline, write_baseline
 from trendscope.scoring.engine import DEFAULT_WEIGHTS, EntityInput, Signal, score_population
 from trendscope.seed import catalog as C
 
@@ -28,6 +29,8 @@ SEED = 42
 SIGNAL_DAYS = 90
 STORE_DAYS = 365
 SCORE_HISTORY_DAYS = 45
+# De seed beschrijft de wereld op 'day0'; `trendscope simulate` crawlt daarna dag voor dag tot vandaag.
+SIMULATION_DAYS = 14
 TODAY = date.today()  # data is deterministisch, maar altijd relatief aan vandaag
 
 ARCHETYPES = ["emerging", "rising", "rising", "peak", "saturated", "declining", "noise", "ads_only"]
@@ -132,7 +135,7 @@ def run(reset: bool = True) -> dict[str, int]:
                 """TRUNCATE niches, stores, store_technologies, product_clusters, products, cluster_members,
                    suppliers, supplier_offers, advertisers, ads, creators, videos, keywords, entity_links,
                    scores, score_weights, connectors, crawl_targets, crawl_jobs, curated_lists, curated_list_items,
-                   watchlists, alert_rules, alert_events RESTART IDENTITY CASCADE"""
+                   watchlists, alert_rules, alert_events, store_candidates RESTART IDENTITY CASCADE"""
             )
             for table in (
                 "product_snapshots",
@@ -178,6 +181,7 @@ def run(reset: bool = True) -> dict[str, int]:
                     {
                         "id": _returned_id(cur),
                         "title": title,
+                        "category": category,
                         "emoji": emoji,
                         "price": price,
                         "cost": cost,
@@ -238,7 +242,7 @@ def run(reset: bool = True) -> dict[str, int]:
                 "tiktok": int(scale * rng.uniform(0.0, 0.8)),
                 "pinterest": int(scale * rng.uniform(0.0, 0.05)),
             }
-            store = {
+            store: dict[str, Any] = {
                 "name": name,
                 "domain": f"{name.lower()}{tld}",
                 "country": country,
@@ -249,6 +253,12 @@ def run(reset: bool = True) -> dict[str, int]:
                 "color": color,
                 "live_ads": live_ads_series[-1],
                 "age_days": (TODAY - launched).days,
+                "theme": rng.choice(C.THEMES),
+                "currency": C.CURRENCY[country],
+                "language": C.LANGUAGE[country],
+                "social": {k: name.lower() for k in followers if followers[k] > 500},
+                "techs": [],
+                "baseline_products": [],
             }
             cur.execute(
                 """INSERT INTO stores (domain, platform, name, description, country, currency, languages, theme, niche_id,
@@ -264,9 +274,9 @@ def run(reset: bool = True) -> dict[str, int]:
                     country,
                     C.CURRENCY[country],
                     [C.LANGUAGE[country]],
-                    rng.choice(C.THEMES),
+                    store["theme"],
                     world.niches[niche_slug],
-                    Jsonb({k: f"{name.lower()}" for k in followers if followers[k] > 500}),
+                    Jsonb(store["social"]),
                     launched,
                     now - timedelta(days=min(400, (TODAY - launched).days)),
                     now - timedelta(hours=rng.randint(1, 30)),
@@ -325,6 +335,7 @@ def run(reset: bool = True) -> dict[str, int]:
                     "ON CONFLICT DO NOTHING",
                     (store["id"], kind, t_name, now - timedelta(days=rng.randint(1, 300))),
                 )
+                store["techs"].append(t_name)
 
         ch.insert("store_metrics_daily", store_metric_rows, column_names=["store_id", "metric", "date", "value"])
 
@@ -340,28 +351,70 @@ def run(reset: bool = True) -> dict[str, int]:
             for idx, cl in enumerate(chosen):
                 variant = "" if cl["id"] not in seen else f" — {rng.choice(['Bundle', '2-Pack', 'Pro', 'Mini', 'XL'])}"
                 seen.add(cl["id"])
-                price = round(cl["price"] * rng.uniform(0.8, 1.25), 2) - 0.05
+                price = round(round(cl["price"] * rng.uniform(0.8, 1.25), 2) - 0.05, 2)
                 title = f"{cl['title']}{variant}"
+                handle = slugify(title)
+                compare_at = round(price * rng.choice([1.4, 1.6, 2.0]), 2) if rng.random() < 0.6 else None
+                sizes = rng.choice(
+                    [["Default Title"], ["S", "M", "L"], ["1-Pack", "2-Pack"], ["Black", "White", "Sage"]]
+                )
+                variants = [
+                    {
+                        "id": f"{store['id']}{idx:03d}{vi:02d}",
+                        "title": v,
+                        "price": price,
+                        "available": rng.random() > 0.08,
+                    }
+                    for vi, v in enumerate(sizes)
+                ]
+                # vóór day0 gepubliceerd, zodat de gesimuleerde crawls daarna kloppen
+                published = now - timedelta(
+                    days=rng.randint(SIMULATION_DAYS + 2, max(SIMULATION_DAYS + 3, min(200, store["age_days"])))
+                )
+                image = media("product", e=cl["emoji"], h=(cl["hue"] + idx * 7) % 360)
+                external_id = str(7_800_000_000_000 + store["id"] * 1000 + idx)
                 cur.execute(
                     """INSERT INTO products (source, store_id, external_id, url, title, vendor, category, tags, images,
-                         price, currency, first_seen, last_seen, best_seller_rank, content_hash)
-                       VALUES ('shopify',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                         price, currency, first_seen, last_seen, best_seller_rank, content_hash, handle, compare_at_price,
+                         available, variants, published_at)
+                       VALUES ('shopify',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                     (
                         store["id"],
-                        str(7_800_000_000_000 + store["id"] * 1000 + idx),
-                        f"https://{store['domain']}/products/{slugify(title)}",
+                        external_id,
+                        f"https://{store['domain']}/products/{handle}",
                         title,
                         store["name"],
-                        None,
+                        cl["category"],
                         [cl["niche"]],
-                        [media("product", e=cl["emoji"], h=(cl["hue"] + idx * 7) % 360)],
+                        [image],
                         price,
                         "EUR",
-                        now - timedelta(days=rng.randint(1, max(2, min(200, store["age_days"])))),
+                        published,
                         now,
                         rank if idx < 10 else None,
-                        f"seed-{store['id']}-{idx}",
+                        None,
+                        handle,
+                        compare_at,
+                        any(v["available"] for v in variants),
+                        Jsonb(variants),
+                        published,
                     ),
+                )
+                store["baseline_products"].append(
+                    {
+                        "id": external_id,
+                        "handle": handle,
+                        "title": title,
+                        "price": price,
+                        "compare_at_price": compare_at,
+                        "variants": variants,
+                        "published_at": published.isoformat(),
+                        "image": image,
+                        "best_seller_rank": rank if idx < 10 else None,
+                        "product_type": cl["category"],
+                        "vendor": store["name"],
+                        "tags": [cl["niche"]],
+                    }
                 )
                 pid = _returned_id(cur)
                 rank += 1
@@ -674,7 +727,6 @@ def run(reset: bool = True) -> dict[str, int]:
             ("google_trends", "Google Trends API (alpha)", "official_api", 24),
             ("reddit", "Reddit API", "official_api", 12),
             ("aliexpress_affiliate", "AliExpress Affiliate API", "official_api", 24),
-            ("ct_logs", "Certificate Transparency-logs", "scrape_public", 6),
         ]
         for m in manifests.values():
             cur.execute(
@@ -736,7 +788,42 @@ def run(reset: bool = True) -> dict[str, int]:
                     (list_id, st["id"], i),
                 )
 
+        # ── Crawl-targets: elke winkel wordt door de scheduler opgepakt ──
+        for store in world.stores:
+            cur.execute(
+                """INSERT INTO crawl_targets (connector_id, target, entity_type, entity_id, priority, interval_secs, next_run_at)
+                   VALUES ('shopify_storefront', %s, 'store', %s, %s, 86400, %s)""",
+                (store["domain"], store["id"], 50, now + timedelta(minutes=rng.randint(0, 24 * 60))),
+            )
+            cur.execute(
+                "UPDATE stores SET shopify_domain = %s WHERE id = %s",
+                (f"{store['name'].lower()}.myshopify.com", store["id"]),
+            )
+
         conn.commit()
+
+    # Dag-0-staat van alle winkels: de basis van het nep-internet in mock-modus (zie trendscope.mockweb)
+    write_baseline(
+        [
+            StoreBaseline(
+                domain=st["domain"],
+                name=st["name"],
+                country=st["country"],
+                currency=st["currency"],
+                language=st["language"],
+                theme=st["theme"],
+                arch=st["arch"],
+                color=st["color"],
+                niches=st["niches"],
+                technologies=st["techs"],
+                social=st["social"],
+                products=st["baseline_products"],
+            )
+            for st in world.stores
+        ],
+        # simulate eindigt gisteren; een live crawl vandaag ziet dan nog één verse dag wijzigingen
+        day0=TODAY - timedelta(days=SIMULATION_DAYS + 1),
+    )
 
     return {
         "niches": len(world.niches),

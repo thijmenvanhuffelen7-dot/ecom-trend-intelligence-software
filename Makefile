@@ -3,7 +3,7 @@ SHELL := /bin/bash
 COMPOSE := docker compose -f infra/docker/docker-compose.dev.yml
 ENV := set -a; [ -f .env ] && . ./.env; set +a;
 
-.PHONY: help setup dev-services stop migrate seed dev test lint typecheck e2e check clean
+.PHONY: help setup dev-services stop migrate seed simulate index dev worker tick discover test lint typecheck e2e check clean
 
 help: ## Toon deze hulp
 	@grep -E '^[a-z0-9-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[32m%-14s\033[0m %s\n", $$1, $$2}'
@@ -23,8 +23,24 @@ migrate: ## Draai Postgres- én ClickHouse-migraties
 	$(ENV) pnpm -s db:migrate
 	$(ENV) cd workers && uv run trendscope migrate-clickhouse
 
-seed: ## Vul alle databases met de samenhangende demodataset
+seed: ## Demowereld seeden, 14 dagen crawls + discovery simuleren en de zoekindex vullen
 	$(ENV) cd workers && uv run trendscope seed
+	$(MAKE) simulate index
+
+simulate: ## Speel 14 dagen crawls en discovery af op het nep-internet (mock-modus)
+	$(ENV) cd workers && uv run trendscope simulate --days 14
+
+index: ## (Her)indexeer winkels en producten in Meilisearch
+	-$(ENV) cd workers && uv run trendscope index-search
+
+worker: ## Start Celery: scheduler (beat) + crawl-worker
+	$(ENV) cd workers && uv run celery -A trendscope.worker.celery_app worker -B -Q default,crawl --loglevel=INFO
+
+tick: ## Eén schedulerronde zonder Celery (handig tijdens ontwikkelen)
+	$(ENV) cd workers && uv run trendscope tick
+
+discover: ## Discovery nu draaien (CT-logs + ad-landingspagina's → probe)
+	$(ENV) cd workers && uv run trendscope discover
 
 dev: ## Start de web-app op http://localhost:3000
 	$(ENV) pnpm --filter @trendscope/web dev
