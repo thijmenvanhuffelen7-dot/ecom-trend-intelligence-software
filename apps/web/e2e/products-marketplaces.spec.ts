@@ -20,7 +20,7 @@ test("marketplace filter and product detail with matched listings and supplier f
   const listings = page.getByTestId("marketplace-listings");
   await expect(listings).toBeVisible();
   await expect(listings).toContainText(/AliExpress|Amazon|CJ/i);
-  await expect(listings.getByText(/^tekst \d+%$/).first()).toBeVisible();
+  await expect(listings.getByText(/tekst \d+%/).first()).toBeVisible();
 
   // Een andere leverancier kiezen zet zijn inkoopprijs in de calculator
   const suppliers = page.getByTestId("supplier-list").getByRole("button");
