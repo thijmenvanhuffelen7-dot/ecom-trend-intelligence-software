@@ -173,8 +173,18 @@ export interface Boards {
 export interface ClusterMembers {
   cluster_id: Int8;
   confidence: number;
+  evidence: Generated<Json>;
   method: Generated<string>;
   product_id: Int8;
+}
+
+export interface ClusterMerges {
+  evidence: Generated<Json>;
+  from_cluster: Int8;
+  id: Generated<Int8>;
+  into_cluster: Int8;
+  merged_at: Generated<Timestamp>;
+  score: number;
 }
 
 export interface Connectors {
@@ -314,18 +324,23 @@ export interface ProductClusters {
   ai_insights: Json | null;
   canonical_title: string;
   category: string | null;
+  created_by: Generated<string>;
   creator_count: Generated<number>;
   currency: Generated<string>;
   embedding: string | null;
   first_seen: Generated<Timestamp>;
   id: Generated<Int8>;
+  image_phash: Int8 | null;
   image_url: string | null;
   is_curated: Generated<boolean>;
   keywords: Generated<string[]>;
+  marketplace_orders_30d: Generated<number>;
   max_price: Numeric | null;
   min_price: Numeric | null;
+  min_supplier_cost: Numeric | null;
   niche_id: Int8 | null;
   slug: string;
+  source_count: Generated<number>;
   store_count: Generated<number>;
 }
 
@@ -333,18 +348,32 @@ export interface Products {
   available: Generated<boolean>;
   best_seller_rank: number | null;
   category: string | null;
+  clustered_at: Timestamp | null;
   compare_at_price: Numeric | null;
   content_hash: string | null;
   currency: string | null;
+  embedding: string | null;
+  est_monthly_sales: Json | null;
   external_id: string;
   first_seen: Generated<Timestamp>;
   handle: string | null;
   id: Generated<Int8>;
+  image_phash: Int8 | null;
   images: Generated<string[]>;
   last_seen: Generated<Timestamp>;
+  orders_30d: number | null;
   price: Numeric | null;
   published_at: Timestamp | null;
+  rating: number | null;
   removed_at: Timestamp | null;
+  reviews_count: number | null;
+  sales_rank: number | null;
+  sales_rank_category: string | null;
+  seller_id: string | null;
+  seller_name: string | null;
+  shipping_cost: Numeric | null;
+  shipping_days: string | null;
+  ships_from: string | null;
   source: ProductSource;
   status: Generated<string>;
   store_id: Int8 | null;
@@ -457,6 +486,7 @@ export interface SupplierOffers {
   id: Generated<Int8>;
   orders: number | null;
   price: Numeric;
+  product_id: Int8 | null;
   shipping_cost: Generated<Numeric>;
   shipping_days: string | null;
   supplier_id: Int8;
@@ -465,11 +495,15 @@ export interface SupplierOffers {
 }
 
 export interface Suppliers {
+  country: string | null;
   external_id: string;
   id: Generated<Int8>;
   name: string;
+  orders_total: number | null;
+  positive_rate: number | null;
   rating: number | null;
   source: ProductSource;
+  store_url: string | null;
   url: string | null;
 }
 
@@ -540,6 +574,7 @@ export interface DB {
   board_items: BoardItems;
   boards: Boards;
   cluster_members: ClusterMembers;
+  cluster_merges: ClusterMerges;
   connectors: Connectors;
   crawl_jobs: CrawlJobs;
   crawl_targets: CrawlTargets;

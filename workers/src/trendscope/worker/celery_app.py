@@ -28,5 +28,6 @@ app.conf.update(
         "discovery": {"task": "trendscope.discover", "schedule": crontab(minute=15)},
         "search-index": {"task": "trendscope.reindex_search", "schedule": crontab(minute="*/15")},
         "screenshots": {"task": "trendscope.screenshots", "schedule": crontab(minute=40)},
+        "clustering": {"task": "trendscope.cluster", "schedule": crontab(minute="5,35")},
     },
 )

@@ -32,23 +32,31 @@ export interface ScoreBreakdown {
 
 /** Marge per stuk na inkoop, verzending, transactiekosten en geschatte CPA. */
 export function unitEconomics(input: {
-  salePrice: number;
+  salePrice: number; // wat de klant betaalt (incl. BTW als vatPct is gezet)
   productCost: number;
   shippingCost: number;
   feePct?: number; // betaalprovider + platform, standaard 3,5%
   cpa?: number;
+  vatPct?: number; // bv. 0.21: de BTW gaat af van de omzet
+  returnRate?: number; // bv. 0.05: aandeel orders dat (zonder doorverkoop) wordt terugbetaald
 }) {
+  const vat = input.salePrice - input.salePrice / (1 + (input.vatPct ?? 0));
+  const revenue = input.salePrice - vat;
   const fees = input.salePrice * (input.feePct ?? 0.035);
   const cogs = input.productCost + input.shippingCost;
-  const grossProfit = input.salePrice - cogs - fees;
+  const returns = revenue * (input.returnRate ?? 0);
+  const grossProfit = revenue - cogs - fees - returns;
   const netProfit = grossProfit - (input.cpa ?? 0);
   return {
+    vat,
+    revenue,
     fees,
     cogs,
+    returns,
     grossProfit,
     netProfit,
-    grossMargin: input.salePrice > 0 ? grossProfit / input.salePrice : 0,
-    netMargin: input.salePrice > 0 ? netProfit / input.salePrice : 0,
+    grossMargin: revenue > 0 ? grossProfit / revenue : 0,
+    netMargin: revenue > 0 ? netProfit / revenue : 0,
     breakEvenRoas: grossProfit > 0 ? input.salePrice / grossProfit : Infinity,
   };
 }

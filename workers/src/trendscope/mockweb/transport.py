@@ -12,6 +12,16 @@ import httpx
 from trendscope.mockweb import pages
 from trendscope.mockweb.world import catalog, current_day, day_timestamp, sites
 
+MARKETPLACE_HOSTS = {
+    "api-sg.aliexpress.com",
+    "ae-pic-a1.aliexpress-media.com",
+    "api.amazon.co.uk",
+    "creatorsapi.amazon",
+    "m.media-amazon.com",
+    "developers.cjdropshipping.com",
+    "cf.cjdropshipping.com",
+}
+
 
 def _stable(domain: str, salt: str) -> int:
     return zlib.crc32(f"{domain}:{salt}".encode()) % 100
@@ -51,6 +61,8 @@ class MockWebTransport(httpx.BaseTransport):
             return httpx.Response(200, html=html) if html else httpx.Response(404, text="Not found")
         if host == "open.tiktokapis.com":
             return self._tiktok(request)
+        if host in MARKETPLACE_HOSTS:
+            return self._marketplace(request, host)
         if host == "crt.sh":
             if request.url.path == "/robots.txt":
                 return httpx.Response(200, text="User-agent: *\nAllow: /\n")
@@ -231,3 +243,181 @@ class MockWebTransport(httpx.BaseTransport):
                 "error": {"code": "ok", "message": "", "log_id": "mock"},
             },
         )
+
+    # ── Marktplaatsen (AliExpress Affiliate, Amazon Creators API, CJ Dropshipping) ──────────
+    def _marketplace(self, request: httpx.Request, host: str) -> httpx.Response:
+        from trendscope.marketplaces.aliexpress import sign
+        from trendscope.mockweb import marketplace_world as mw
+        from trendscope.mockweb.images import product_png
+
+        day = self.day
+        path = request.url.path
+        if host in ("ae-pic-a1.aliexpress-media.com", "m.media-amazon.com", "cf.cjdropshipping.com"):
+            ext_id = path.rsplit("/", 1)[-1].removesuffix(".png")
+            o = mw.offers_by_id().get(ext_id)
+            if not o:
+                return httpx.Response(404)
+            return httpx.Response(
+                200, content=product_png(o.item.title, o.variant), headers={"content-type": "image/png"}
+            )
+
+        if host == "api-sg.aliexpress.com":
+            params = dict(request.url.params)
+            given = params.pop("sign", "")
+            if given != sign(params, "mock-aliexpress_app_secret"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "error_response": {
+                            "code": "IncompleteSignature",
+                            "msg": "The request signature does not conform to platform standards",
+                        }
+                    },
+                )
+            size = int(params.get("page_size", "20"))
+            page = int(params.get("page_no", "1"))
+            hits = mw.search("aliexpress", params.get("keywords", ""))
+            chunk = hits[(page - 1) * size : page * size]
+            products = [
+                {
+                    "product_id": int(o.external_id),
+                    "product_title": o.title,
+                    "target_sale_price": f"{mw.price_on(o, day):.2f}",
+                    "target_sale_price_currency": "EUR",
+                    "target_original_price": f"{o.base_price * 1.8:.2f}",
+                    "product_main_image_url": o.image_url,
+                    "product_detail_url": f"https://www.aliexpress.com/item/{o.external_id}.html",
+                    "evaluate_rate": f"{o.rating * 20:.1f}%",
+                    "lastest_volume": mw.orders_on(o, day),
+                    "shop_id": int(o.seller_id),
+                    "shop_url": f"https://www.aliexpress.com/store/{o.seller_id}",
+                    "first_level_category_name": o.item.niche,
+                    "second_level_category_name": o.item.niche,
+                    "ship_to_days": "7-15",
+                }
+                for o in chunk
+            ]
+            return httpx.Response(
+                200,
+                json={
+                    "aliexpress_affiliate_product_query_response": {
+                        "resp_result": {
+                            "resp_code": 200,
+                            "resp_msg": "Call succeeds",
+                            "result": {
+                                "current_page_no": page,
+                                "current_record_count": len(products),
+                                "total_record_count": len(hits),
+                                "products": {"product": products},
+                            },
+                        }
+                    }
+                },
+            )
+
+        if host == "api.amazon.co.uk" and path == "/auth/o2/token":
+            body = json.loads(request.content)
+            if body.get("scope") != "creatorsapi::default" or body.get("grant_type") != "client_credentials":
+                return httpx.Response(400, json={"error": "invalid_request"})
+            return httpx.Response(200, json={"access_token": "Atc|mock", "token_type": "bearer", "expires_in": 3600})
+        if host == "creatorsapi.amazon" and path == "/catalog/v1/searchItems":
+            if request.headers.get("authorization") != "Bearer Atc|mock" or not request.headers.get("x-marketplace"):
+                return httpx.Response(401, json={"errors": [{"code": "Unauthorized", "message": "invalid token"}]})
+            body = json.loads(request.content)
+            hits = mw.search("amazon", body.get("keywords", ""))[: int(body.get("itemCount", 10))]
+            return httpx.Response(
+                200,
+                json={
+                    "searchResult": {
+                        "totalResultCount": len(hits),
+                        "items": [
+                            {
+                                "asin": o.external_id,
+                                "detailPageURL": f"https://www.amazon.de/dp/{o.external_id}?tag={body.get('partnerTag')}",
+                                "itemInfo": {
+                                    "title": {"displayValue": o.title},
+                                    "byLineInfo": {"brand": {"displayValue": o.seller_name}},
+                                },
+                                "images": {"primary": {"medium": {"url": o.image_url, "width": 160, "height": 160}}},
+                                "offersV2": {
+                                    "listings": [
+                                        {"price": {"money": {"amount": mw.price_on(o, day), "currency": "EUR"}}}
+                                    ]
+                                },
+                                "browseNodeInfo": {
+                                    "websiteSalesRank": {
+                                        "salesRank": mw.rank_on(o, day),
+                                        "displayName": "Home & Kitchen",
+                                    }
+                                },
+                            }
+                            for o in hits
+                        ],
+                    }
+                },
+            )
+
+        if host == "developers.cjdropshipping.com":
+            if path.endswith("/authentication/getAccessToken"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "code": 200,
+                        "result": True,
+                        "message": "Success",
+                        "data": {"accessToken": "cj-mock-token", "accessTokenExpiryDate": "2099-01-01"},
+                    },
+                )
+            if request.headers.get("cj-access-token") != "cj-mock-token":
+                return httpx.Response(200, json={"code": 1600001, "result": False, "message": "Invalid token"})
+            if path.endswith("/product/list"):
+                hits = mw.search("cj", request.url.params.get("productNameEn", ""))[
+                    : int(request.url.params.get("pageSize", "20"))
+                ]
+                return httpx.Response(
+                    200,
+                    json={
+                        "code": 200,
+                        "result": True,
+                        "message": "Success",
+                        "data": {
+                            "pageNum": 1,
+                            "pageSize": len(hits),
+                            "total": len(hits),
+                            "list": [
+                                {
+                                    "pid": o.external_id,
+                                    "productNameEn": o.title,
+                                    "productSku": f"CJ{o.external_id[:6]}",
+                                    "productImage": o.image_url,
+                                    "sellPrice": f"{mw.price_on(o, day):.2f}",
+                                    "categoryName": o.item.niche,
+                                    "sourceFrom": "CN",
+                                }
+                                for o in hits
+                            ],
+                        },
+                    },
+                )
+            if path.endswith("/logistic/freightCalculate"):
+                vid = json.loads(request.content)["products"][0]["vid"]
+                o = mw.offers_by_id().get(vid)
+                if not o or not o.shipping:
+                    return httpx.Response(200, json={"code": 200, "result": True, "data": []})
+                cost, lo, hi = o.shipping
+                return httpx.Response(
+                    200,
+                    json={
+                        "code": 200,
+                        "result": True,
+                        "data": [
+                            {"logisticName": "CJPacket Ordinary", "logisticPrice": cost, "logisticAging": f"{lo}-{hi}"},
+                            {
+                                "logisticName": "CJPacket Express",
+                                "logisticPrice": round(cost * 2.2, 2),
+                                "logisticAging": f"{max(3, lo - 3)}-{hi - 4}",
+                            },
+                        ],
+                    },
+                )
+        return httpx.Response(404, json={"error": "not found"})

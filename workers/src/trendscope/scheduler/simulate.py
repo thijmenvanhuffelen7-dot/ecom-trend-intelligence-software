@@ -68,12 +68,22 @@ def simulate(settings: Settings, days: int, *, progress: bool = True, workers: i
                         if outcome:
                             totals.update(e.type for e in outcome.events)
                             totals.update(
-                                {k: v for k, v in outcome.stats.items() if k.startswith("ad_") and isinstance(v, int)}
+                                {
+                                    k: v
+                                    for k, v in outcome.stats.items()
+                                    if k.startswith(("ad_", "listing_", "mp_")) and isinstance(v, int)
+                                }
                             )
                             totals["crawls"] += 1
+            # Zoals de beat-job: wat vandaag nieuw binnenkwam (winkels + marktplaatsen) clusteren
+            from trendscope.clustering.engine import cluster_products
+
+            cstats = cluster_products(conn, now=day_timestamp(day, 23)).as_dict()
+            totals.update({f"cluster_{k}": v for k, v in cstats.items()})
             if progress:
                 print(
                     f"  dag {day}/{days}: {totals['crawls']} crawls, {totals['product_added']} nieuw, "
-                    f"{totals['price_changed']} prijswijzigingen, {totals.get('discovery_accepted', 0)} winkels ontdekt"
+                    f"{totals['price_changed']} prijswijzigingen, {totals.get('discovery_accepted', 0)} winkels ontdekt, "
+                    f"{totals['cluster_new_clusters']} nieuwe clusters, {totals['cluster_merged']} samengevoegd"
                 )
     return dict(totals)

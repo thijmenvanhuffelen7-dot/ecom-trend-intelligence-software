@@ -46,4 +46,13 @@ describe("unitEconomics", () => {
     expect(r.netProfit).toBeCloseTo(14);
     expect(r.breakEvenRoas).toBeCloseTo(40 / 26);
   });
+
+  it("takes VAT off revenue and charges returns", () => {
+    const r = unitEconomics({ salePrice: 36.3, productCost: 8, shippingCost: 4, feePct: 0, vatPct: 0.21, returnRate: 0.1 });
+    expect(r.vat).toBeCloseTo(6.3);
+    expect(r.revenue).toBeCloseTo(30);
+    expect(r.returns).toBeCloseTo(3);
+    expect(r.grossProfit).toBeCloseTo(15);
+    expect(r.netMargin).toBeCloseTo(0.5);
+  });
 });

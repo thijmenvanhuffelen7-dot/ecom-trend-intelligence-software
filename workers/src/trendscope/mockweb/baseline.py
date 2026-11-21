@@ -34,16 +34,19 @@ class StoreBaseline(BaseModel):
 class Baseline(BaseModel):
     day0: date
     stores: list[StoreBaseline]
+    clusters: list[
+        dict[str, Any]
+    ] = []  # productclusters van de seed (titel, prijs, inkoop, archetype) voor marktplaatsen
 
 
 def baseline_path() -> Path:
     return Path(get_settings().mockweb_dir) / "baseline.json"
 
 
-def write_baseline(stores: list[StoreBaseline], day0: date) -> Path:
+def write_baseline(stores: list[StoreBaseline], day0: date, clusters: list[dict[str, Any]] | None = None) -> Path:
     path = baseline_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(Baseline(day0=day0, stores=stores).model_dump_json())
+    path.write_text(Baseline(day0=day0, stores=stores, clusters=clusters or []).model_dump_json())
     load_baseline.cache_clear()
     return path
 

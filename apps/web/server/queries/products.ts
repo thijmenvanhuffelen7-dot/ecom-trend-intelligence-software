@@ -4,7 +4,8 @@ import { PHASES, type Phase, type ScoreBreakdown } from "@trendscope/core";
 import { chQuery } from "../clickhouse";
 import { list, num, oneOf, page, range, str, type SearchParams } from "./params";
 
-export const PRODUCT_SORTS = ["opportunity", "validation", "growth", "saturation_asc", "stores", "newest"] as const;
+export const PRODUCT_SORTS = ["opportunity", "validation", "growth", "saturation_asc", "stores", "marketplace_orders", "newest"] as const;
+export const PRODUCT_SOURCES = ["shops", "marketplaces", "both"] as const;
 export const PRODUCT_PAGE_SIZE = 30;
 
 export function parseProductFilters(sp: SearchParams) {
@@ -16,6 +17,7 @@ export function parseProductFilters(sp: SearchParams) {
     maxSaturation: num(sp, "maxsat"),
     price: range(sp, "price"),
     curated: str(sp, "curated") === "1",
+    source: oneOf(sp, "source", ["all", ...PRODUCT_SOURCES] as const, "all"),
     sort: oneOf(sp, "sort", PRODUCT_SORTS, "opportunity"),
     page: page(sp),
   };
@@ -25,7 +27,7 @@ export type ProductFilters = ReturnType<typeof parseProductFilters>;
 export async function searchProducts(f: ProductFilters) {
   let q = getDb()
     .selectFrom("product_clusters as c")
-    .innerJoin("scores as s", (j) => j.onRef("s.entity_id", "=", "c.id").on("s.entity_type", "=", "product_cluster"))
+    .leftJoin("scores as s", (j) => j.onRef("s.entity_id", "=", "c.id").on("s.entity_type", "=", "product_cluster"))
     .leftJoin("niches as n", "n.id", "c.niche_id");
   if (f.q) q = q.where("c.canonical_title", "ilike", `%${f.q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`);
   if (f.niches.length) q = q.where("n.slug", "in", f.niches);
@@ -35,19 +37,24 @@ export async function searchProducts(f: ProductFilters) {
   if (f.price.min !== undefined) q = q.where("c.max_price", ">=", f.price.min);
   if (f.price.max !== undefined) q = q.where("c.min_price", "<=", f.price.max);
   if (f.curated) q = q.where("c.is_curated", "=", true);
+  const onMarketplace = sql<boolean>`exists (select 1 from cluster_members m join products p on p.id = m.product_id where m.cluster_id = c.id and p.store_id is null)`;
+  if (f.source === "shops") q = q.where("c.store_count", ">", 0);
+  if (f.source === "marketplaces") q = q.where(onMarketplace);
+  if (f.source === "both") q = q.where("c.store_count", ">", 0).where(onMarketplace);
 
   const { total } = await q.select(sql<number>`count(*)::int`.as("total")).executeTakeFirstOrThrow();
   let rows = q.select([
     "c.id", "c.canonical_title", "c.image_url", "c.min_price", "c.max_price", "c.currency", "c.store_count", "c.ad_count",
     "c.creator_count", "c.is_curated", "c.first_seen", "n.slug as niche_slug", "s.opportunity", "s.validation", "s.saturation",
-    "s.growth_velocity", "s.phase", "s.breakdown",
+    "s.growth_velocity", "s.phase", "s.breakdown", "c.source_count", "c.marketplace_orders_30d", "c.min_supplier_cost",
   ]);
   rows = {
-    opportunity: rows.orderBy("s.opportunity", "desc"),
-    validation: rows.orderBy("s.validation", "desc"),
-    growth: rows.orderBy("s.growth_velocity", "desc"),
-    saturation_asc: rows.orderBy("s.saturation", "asc"),
+    opportunity: rows.orderBy("s.opportunity", sql`desc nulls last`),
+    validation: rows.orderBy("s.validation", sql`desc nulls last`),
+    growth: rows.orderBy("s.growth_velocity", sql`desc nulls last`),
+    saturation_asc: rows.orderBy("s.saturation", sql`asc nulls last`),
     stores: rows.orderBy("c.store_count", "desc"),
+    marketplace_orders: rows.orderBy("c.marketplace_orders_30d", "desc"),
     newest: rows.orderBy("c.first_seen", "desc"),
   }[f.sort].orderBy("c.id");
   const result = await rows.limit(PRODUCT_PAGE_SIZE).offset((f.page - 1) * PRODUCT_PAGE_SIZE).execute();
@@ -66,7 +73,7 @@ export async function searchProducts(f: ProductFilters) {
     total,
     rows: result.map((r) => ({
       ...r,
-      breakdown: r.breakdown as unknown as ScoreBreakdown,
+      breakdown: (r.breakdown as unknown as ScoreBreakdown | null) ?? null,
       demand: demand.find((d) => d.id === r.id)?.values.map(Number) ?? [],
     })),
   };
@@ -78,7 +85,7 @@ export async function getProduct(id: number, workspaceId: string) {
   const db = getDb();
   const cluster = await db
     .selectFrom("product_clusters as c")
-    .innerJoin("scores as s", (j) => j.onRef("s.entity_id", "=", "c.id").on("s.entity_type", "=", "product_cluster"))
+    .leftJoin("scores as s", (j) => j.onRef("s.entity_id", "=", "c.id").on("s.entity_type", "=", "product_cluster"))
     .leftJoin("niches as n", "n.id", "c.niche_id")
     .selectAll("c")
     .select(["s.opportunity", "s.validation", "s.saturation", "s.growth_velocity", "s.phase", "s.breakdown", "s.weights_version", "s.computed_at", "n.slug as niche_slug", "n.name_nl", "n.name_en"])
@@ -86,7 +93,7 @@ export async function getProduct(id: number, workspaceId: string) {
     .executeTakeFirst();
   if (!cluster) return null;
 
-  const [stores, ads, videos, offers, similar, signals, history, watching] = await Promise.all([
+  const [stores, ads, videos, offers, similar, signals, history, watching, listings] = await Promise.all([
     db
       .selectFrom("cluster_members as m")
       .innerJoin("products as p", "p.id", "m.product_id")
@@ -125,19 +132,38 @@ export async function getProduct(id: number, workspaceId: string) {
     db
       .selectFrom("supplier_offers as o")
       .innerJoin("suppliers as su", "su.id", "o.supplier_id")
-      .select(["o.id", "o.price", "o.shipping_cost", "o.currency", "o.orders", sql<string>`o.shipping_days::text`.as("shipping_days"), "su.name", "su.source", "su.rating"])
+      .leftJoin("products as p", "p.id", "o.product_id")
+      .select([
+        "o.id", "o.price", "o.shipping_cost", "o.currency", "o.orders", "o.url", sql<string>`o.shipping_days::text`.as("shipping_days"),
+        "su.name", "su.source", "su.rating", "su.positive_rate", "su.country", "p.title as product_title",
+        sql<string | null>`p.images[1]`.as("image"),
+      ])
       .where("o.cluster_id", "=", cluster.id)
-      .orderBy("o.price")
+      .orderBy(sql`o.price + o.shipping_cost`)
+      .limit(24)
       .execute(),
-    db
-      .selectFrom("product_clusters as c")
-      .innerJoin("scores as s", (j) => j.onRef("s.entity_id", "=", "c.id").on("s.entity_type", "=", "product_cluster"))
-      .select(["c.id", "c.canonical_title", "c.image_url", "s.opportunity", "s.phase"])
-      .where("c.niche_id", "=", cluster.niche_id)
-      .where("c.id", "!=", cluster.id)
-      .orderBy("s.opportunity", "desc")
-      .limit(5)
-      .execute(),
+    // Vergelijkbaar = dichtstbij in de embeddingruimte (tekst); valt terug op dezelfde niche
+    cluster.embedding
+      ? db
+          .selectFrom("product_clusters as c")
+          .leftJoin("scores as s", (j) => j.onRef("s.entity_id", "=", "c.id").on("s.entity_type", "=", "product_cluster"))
+          .select(["c.id", "c.canonical_title", "c.image_url", "s.opportunity", "s.phase", sql<number>`1 - (c.embedding <=> ${cluster.embedding}::vector)`.as("similarity")])
+          .where("c.id", "!=", cluster.id)
+          .where("c.embedding", "is not", null)
+          // Zelfde niche, of tekstueel echt verwant: anders vult een lege buurt zich met ruis
+          .where((eb) => eb.or([eb("c.niche_id", "=", cluster.niche_id), eb(sql<number>`1 - (c.embedding <=> ${cluster.embedding}::vector)`, ">=", 0.35)]))
+          .orderBy(sql`c.embedding <=> ${cluster.embedding}::vector`)
+          .limit(5)
+          .execute()
+      : db
+          .selectFrom("product_clusters as c")
+          .leftJoin("scores as s", (j) => j.onRef("s.entity_id", "=", "c.id").on("s.entity_type", "=", "product_cluster"))
+          .select(["c.id", "c.canonical_title", "c.image_url", "s.opportunity", "s.phase", sql<number | null>`null`.as("similarity")])
+          .where("c.niche_id", "=", cluster.niche_id)
+          .where("c.id", "!=", cluster.id)
+          .orderBy("s.opportunity", sql`desc nulls last`)
+          .limit(5)
+          .execute(),
     chQuery<{ source: string; d: string; value: number }>(
       `SELECT source, toString(date) AS d, value FROM entity_signals_daily FINAL
        WHERE entity_type = 'product_cluster' AND entity_id = {id:UInt64} ORDER BY source, date`,
@@ -149,6 +175,21 @@ export async function getProduct(id: number, workspaceId: string) {
       { id },
     ),
     db.selectFrom("watchlists").select("id").where("workspace_id", "=", workspaceId).where("entity_type", "=", "product_cluster").where("entity_id", "=", cluster.id).executeTakeFirst(),
+    db
+      .selectFrom("cluster_members as m")
+      .innerJoin("products as p", "p.id", "m.product_id")
+      .select([
+        "p.id", "p.source", "p.title", "p.url", "p.price", "p.currency", "p.orders_30d", "p.rating", "p.sales_rank",
+        "p.sales_rank_category", "p.est_monthly_sales", "p.seller_name", "m.confidence", "m.method", "m.evidence",
+        sql<string | null>`p.images[1]`.as("image"),
+      ])
+      .where("m.cluster_id", "=", cluster.id)
+      .where("p.store_id", "is", null)
+      .where("p.status", "!=", "removed")
+      .orderBy(sql`coalesce(p.orders_30d, 0)`, "desc")
+      .orderBy("p.sales_rank", sql`asc nulls last`)
+      .limit(12)
+      .execute(),
   ]);
 
   const bySource = new Map<string, [string, number][]>();
@@ -157,8 +198,14 @@ export async function getProduct(id: number, workspaceId: string) {
     bySource.get(s.source)!.push([s.d, Number(s.value)]);
   }
 
+  const { embedding: _embedding, ...rest } = cluster;
   return {
-    cluster: { ...cluster, breakdown: cluster.breakdown as unknown as ScoreBreakdown, phase: cluster.phase as Phase },
+    cluster: { ...rest, breakdown: (cluster.breakdown as unknown as ScoreBreakdown | null) ?? null, phase: (cluster.phase as Phase | null) ?? null },
+    listings: listings.map((l) => ({
+      ...l,
+      evidence: l.evidence as { text?: number; image?: number | null; cosine?: number; containment?: number },
+      est_monthly_sales: l.est_monthly_sales as { value: number; low: number; high: number; confidence: string } | null,
+    })),
     stores,
     ads,
     videos,

@@ -52,6 +52,18 @@ class Settings(BaseSettings):
         "tracker",
     ]
 
+    # Marktplaatsen (fase 4) — officiële API's; secrets alleen via de omgeving
+    aliexpress_app_key: str = ""
+    aliexpress_app_secret: str = ""
+    amazon_creators_client_id: str = ""
+    amazon_creators_client_secret: str = ""
+    amazon_partner_tag: str = ""
+    amazon_marketplace: str = "www.amazon.de"
+    cj_api_key: str = ""
+    marketplace_ship_to: str = "NL"
+    # Productfoto's van marktplaatsen kopiëren naar S3 (weergave): pas na juridisch akkoord in live-modus
+    store_marketplace_images: bool = False
+
     # Media-opslag (S3-compatibel; lokaal MinIO)
     s3_endpoint: str = "http://localhost:9002"  # 9000 is ClickHouse native
     s3_bucket: str = "trendscope-dev"

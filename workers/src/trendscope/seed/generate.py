@@ -826,19 +826,19 @@ def run(reset: bool = True) -> dict[str, int]:
         planned = [
             ("google_trends", "Google Trends API (alpha)", "official_api", 24),
             ("reddit", "Reddit API", "official_api", 12),
-            ("aliexpress_affiliate", "AliExpress Affiliate API", "official_api", 24),
         ]
         for m in manifests.values():
             cur.execute(
                 """INSERT INTO connectors (id, display_name, kind, enabled, legal_review, freshness_sla_hours, last_success_at)
-                   VALUES (%s,%s,%s,true,%s,%s,%s)""",
+                   VALUES (%s,%s,%s,%s,%s,%s,%s)""",
                 (
                     m.id,
                     m.display_name,
                     m.kind.value,
+                    m.legal_review.value != "rejected",  # afgewezen bronnen staan uit
                     m.legal_review.value,
                     m.freshness_sla_hours,
-                    now - timedelta(hours=3),
+                    None if m.legal_review.value == "rejected" else now - timedelta(hours=3),
                 ),
             )
         for cid, name, kind, sla in planned:
@@ -924,9 +924,14 @@ def run(reset: bool = True) -> dict[str, int]:
         ],
         # simulate eindigt gisteren; een live crawl vandaag ziet dan nog één verse dag wijzigingen
         day0=TODAY - timedelta(days=SIMULATION_DAYS + 1),
+        clusters=[
+            {k: cl[k] for k in ("id", "title", "emoji", "price", "cost", "niche", "arch", "category", "hue")}
+            for cl in world.clusters
+        ],
     )
 
     seed_ad_targets(settings.database_url, now)
+    seed_marketplace_targets(settings.database_url, now)
     return {
         "niches": len(world.niches),
         "clusters": len(world.clusters),
@@ -957,10 +962,6 @@ def _estimate(value: float, currency: str | None, method: str) -> dict[str, Any]
     if currency:
         out["currency"] = currency
     return out
-
-
-if __name__ == "__main__":
-    print(json.dumps(run(), indent=2))
 
 
 def seed_ad_targets(database_url: str, now: datetime) -> None:
@@ -1005,3 +1006,31 @@ def seed_ad_targets(database_url: str, now: datetime) -> None:
                 )
         _ = tiktok_advertisers  # TikTok-adverteerders ontdekken we via de zoektermen
         conn.commit()
+
+
+def seed_marketplace_targets(database_url: str, now: datetime) -> None:
+    """Embeddings voor de seed-producten + marktplaatszoektermen per productcluster en ontdekkingstermen."""
+    from trendscope.clustering.engine import ensure_embeddings
+    from trendscope.marketplaces.runner import MARKETPLACE_CONNECTORS
+    from trendscope.mockweb.marketplace_world import MARKET_ONLY, _core, reset_marketplace_caches
+
+    reset_marketplace_caches()
+    with psycopg.connect(database_url) as conn:
+        ensure_embeddings(conn, limit=100_000)
+        with conn.cursor() as cur:
+            # De seed heeft zijn producten al geclusterd; de clustering-job begint bij nieuwe producten
+            cur.execute("UPDATE products SET clustered_at = %s", (now,))
+            cur.execute("SELECT canonical_title FROM product_clusters ORDER BY id")
+            terms = sorted({_core(t).lower() for (t,) in cur.fetchall()} | {t.lower() for t, *_ in MARKET_ONLY})
+            for connector in sorted(MARKETPLACE_CONNECTORS):
+                for term in terms:
+                    cur.execute(
+                        """INSERT INTO crawl_targets (connector_id, target, priority, interval_secs, next_run_at)
+                           VALUES (%s, %s, 50, 86400, %s)""",
+                        (connector, f"q:{term}", now),
+                    )
+        conn.commit()
+
+
+if __name__ == "__main__":
+    print(json.dumps(run(), indent=2))

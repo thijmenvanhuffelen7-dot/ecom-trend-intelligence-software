@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Database, ListOrdered, Radar, Scale, Shield } from "lucide-react";
+import { AlertTriangle, Boxes, CheckCircle2, Database, ListOrdered, Radar, Scale, Shield } from "lucide-react";
 import { getDb, sql } from "@trendscope/db";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 async function loadAdmin() {
   const db = getDb();
-  const [connectors, weights, queue, candidates, recentCandidates, failures] = await Promise.all([
+  const [connectors, weights, queue, candidates, recentCandidates, failures, clustering] = await Promise.all([
     db
       .selectFrom("connectors as c")
       .selectAll("c")
@@ -46,8 +46,19 @@ async function loadAdmin() {
       .orderBy("started_at", "desc")
       .limit(10)
       .execute(),
+    sql<{ products: number; clustered: number; pending: number; orphans: number; clusters: number; auto: number; multi: number; merges: number }>`
+      select
+        (select count(*)::int from products where status <> 'removed') as products,
+        (select count(*)::int from products p where exists (select 1 from cluster_members m where m.product_id = p.id)) as clustered,
+        (select count(*)::int from products where clustered_at is null and status <> 'removed') as pending,
+        (select count(*)::int from products p where clustered_at is not null and status <> 'removed'
+           and not exists (select 1 from cluster_members m where m.product_id = p.id)) as orphans,
+        (select count(*)::int from product_clusters) as clusters,
+        (select count(*)::int from product_clusters where created_by = 'clustering') as auto,
+        (select count(*)::int from product_clusters where source_count >= 2) as multi,
+        (select count(*)::int from cluster_merges) as merges`.execute(db),
   ]);
-  return { connectors, weights, queue: queue.rows[0]!, candidates, recentCandidates, failures };
+  return { connectors, weights, queue: queue.rows[0]!, candidates, recentCandidates, failures, clustering: clustering.rows[0]! };
 }
 
 export default async function AdminPage() {
@@ -55,7 +66,7 @@ export default async function AdminPage() {
   if (session.role === "member" && !session.user.isPlatformAdmin) notFound();
   const t = await getT();
   const L = t.locale;
-  const { connectors, weights, queue, candidates, recentCandidates, failures } = await loadAdmin();
+  const { connectors, weights, queue, candidates, recentCandidates, failures, clustering } = await loadAdmin();
   const w = (weights?.weights ?? {}) as Record<string, number>;
   const maxW = Math.max(...Object.values(w), 1);
   const now = Date.now();
@@ -155,6 +166,38 @@ export default async function AdminPage() {
                 <span className="tabular text-right font-semibold">{v}</span>
               </div>
             ))}
+          </CardBody>
+        </Card>
+
+        <Card data-testid="clustering-stats">
+          <CardHeader icon={<Boxes />} title={t("admin.clustering")} />
+          <CardBody className="space-y-4">
+            <div>
+              <div className="mb-1.5 flex justify-between text-sm">
+                <span className="text-fg-muted">{t("admin.clusteredShare")}</span>
+                <span className="tabular font-semibold">{Math.round((clustering.clustered / Math.max(1, clustering.products)) * 100)}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-bg-subtle">
+                <div className="h-full rounded-full bg-accent" style={{ width: `${(clustering.clustered / Math.max(1, clustering.products)) * 100}%` }} />
+              </div>
+            </div>
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              {(
+                [
+                  [t("admin.clusters"), clustering.clusters],
+                  [t("admin.autoClusters"), clustering.auto],
+                  [t("admin.multiSource"), clustering.multi],
+                  [t("admin.merges"), clustering.merges],
+                  [t("admin.pendingClustering"), clustering.pending],
+                  [t("admin.orphans"), clustering.orphans],
+                ] as const
+              ).map(([k, v]) => (
+                <div key={k} className="rounded-xl bg-bg-subtle px-3 py-2">
+                  <dd className="tabular text-lg font-semibold">{formatNumber(v, L)}</dd>
+                  <dt className="text-xs text-fg-muted">{k}</dt>
+                </div>
+              ))}
+            </dl>
           </CardBody>
         </Card>
 

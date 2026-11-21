@@ -31,7 +31,9 @@ export function MarginCalculator({ salePrice, productCost, shippingCost }: { sal
   const [ship, setShip] = useState(shippingCost);
   const [fee, setFee] = useState(3.5);
   const [cpa, setCpa] = useState(Math.round(salePrice * 0.3 * 100) / 100);
-  const r = unitEconomics({ salePrice: sale, productCost: cost, shippingCost: ship, feePct: fee / 100, cpa });
+  const [vat, setVat] = useState(21);
+  const [returns, setReturns] = useState(5);
+  const r = unitEconomics({ salePrice: sale, productCost: cost, shippingCost: ship, feePct: fee / 100, cpa, vatPct: vat / 100, returnRate: returns / 100 });
   const good = r.netMargin >= 0.15;
   return (
     <div className="grid gap-5 md:grid-cols-[1fr_220px]">
@@ -41,6 +43,9 @@ export function MarginCalculator({ salePrice, productCost, shippingCost }: { sal
         <Field label={t("products.shipping")} value={ship} onChange={setShip} suffix="€" />
         <Field label={t("products.fees")} value={fee} onChange={setFee} suffix="%" />
         <Field label={t("products.cpa")} value={cpa} onChange={setCpa} suffix="€" />
+        <Field label={t("products.vat")} value={vat} onChange={setVat} suffix="%" />
+        <Field label={t("products.returns")} value={returns} onChange={setReturns} suffix="%" />
+        <p className="col-span-2 text-xs text-fg-subtle">{t("products.perUnitIncl")}</p>
       </div>
       <div className={cn("flex flex-col justify-between rounded-2xl p-4", good ? "bg-accent-soft" : "bg-danger-soft")}>
         <div>

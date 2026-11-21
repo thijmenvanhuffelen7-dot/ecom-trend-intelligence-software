@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, Award, Gauge, LayoutGrid, List, Package, Sparkles, Tag, Waves } from "lucide-react";
+import { Activity, Award, Clock, Gauge, Globe, LayoutGrid, List, Package, Sparkles, Tag, Waves } from "lucide-react";
 import { PHASES, type Phase } from "@trendscope/core";
 import { ExplorerHeader } from "@/components/explorer/explorer-header";
 import { ClearFilters, MultiFilter, Pagination, RangeFilter, SelectFilter, SortSelect, ViewToggle } from "@/components/explorer/filters";
@@ -11,18 +11,30 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { requireSession } from "@/lib/auth/server";
 import { getT } from "@/lib/i18n/server";
 import { NICHE_EMOJI } from "@/lib/niches";
-import { formatMoney } from "@/lib/utils";
+import { formatCompact, formatMoney } from "@/lib/utils";
 import { getDb } from "@trendscope/db";
 import type { SearchParams } from "@/server/queries/params";
-import { parseProductFilters, PRODUCT_PAGE_SIZE, PRODUCT_SORTS, searchProducts, type ProductRow } from "@/server/queries/products";
+import { parseProductFilters, PRODUCT_PAGE_SIZE, PRODUCT_SORTS, PRODUCT_SOURCES, searchProducts, type ProductRow } from "@/server/queries/products";
 import type { Translator } from "@/lib/i18n/translate";
 
 export const metadata = { title: "Products" };
 
-const FILTER_PARAMS = ["q", "niche", "phase", "minval", "maxsat", "price", "curated"];
+const FILTER_PARAMS = ["q", "niche", "phase", "minval", "maxsat", "price", "curated", "source"];
+
+function Pending({ t }: { t: Translator }) {
+  return (
+    <Tooltip content={t("products.scorePendingHint")}>
+      <span className="relative z-10 inline-flex cursor-help items-center gap-1 rounded-full bg-bg-subtle px-2 py-0.5 text-xs font-medium text-fg-muted">
+        <Clock className="size-3" /> {t("products.scorePending")}
+      </span>
+    </Tooltip>
+  );
+}
 
 function SignalDots({ row, t }: { row: ProductRow; t: Translator }) {
-  const signals = row.breakdown.signals;
+  if (!row.breakdown) return null;
+  const breakdown = row.breakdown;
+  const signals = breakdown.signals;
   return (
     <Tooltip
       content={
@@ -30,7 +42,7 @@ function SignalDots({ row, t }: { row: ProductRow; t: Translator }) {
           {signals.map((s) => (
             <li key={s.signal} className="flex items-center justify-between gap-4">
               <span className={s.positive ? "text-white" : "text-white/50"}>{t(`signals.${s.signal}`)}</span>
-              <span className="tabular">{s.signal === "price" ? `${Math.round((row.breakdown.margin ?? 0) * 100)}%` : `${s.growth_7d > 0 ? "+" : ""}${s.growth_7d}%`}</span>
+              <span className="tabular">{s.signal === "price" ? `${Math.round((breakdown.margin ?? 0) * 100)}%` : `${s.growth_7d > 0 ? "+" : ""}${s.growth_7d}%`}</span>
             </li>
           ))}
         </ul>
@@ -40,7 +52,7 @@ function SignalDots({ row, t }: { row: ProductRow; t: Translator }) {
         {signals.map((s) => (
           <span key={s.signal} className={`h-3.5 w-1.5 rounded-full ${s.positive ? "bg-accent" : "bg-border-strong"}`} />
         ))}
-        <span className="ml-1.5 text-xs text-fg-muted">{row.breakdown.positive_signals}/{signals.length}</span>
+        <span className="ml-1.5 text-xs text-fg-muted">{breakdown.positive_signals}/{signals.length}</span>
       </span>
     </Tooltip>
   );
@@ -70,6 +82,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             <SelectFilter param="maxsat" label={t("products.filter.maxSaturation")} icon={<Gauge />} options={[20, 35, 50].map((v) => ({ value: String(v), label: `≤ ${v}%` }))} />
             <RangeFilter param="price" label={t("products.filter.price")} icon={<Tag />} presets={[{ label: "< €20", value: "-20" }, { label: "€20 – €40", value: "20-40" }, { label: "€40 – €80", value: "40-80" }, { label: "> €80", value: "80-" }]} />
             <SelectFilter param="curated" label={t("products.filter.curated")} icon={<Activity />} options={[{ value: "1", label: t("products.winning") }]} />
+            <SelectFilter param="source" label={t("products.filterSource")} icon={<Globe />} options={PRODUCT_SOURCES.map((v) => ({ value: v, label: t(`products.source.${v}`) }))} />
             {active && <ClearFilters params={FILTER_PARAMS} label={t("explorer.clearFilters")} />}
           </div>
         </section>
@@ -90,17 +103,19 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                 <div className="relative">
                   <Thumb src={r.image_url} alt={r.canonical_title} className="aspect-square w-full border-0" rounded="rounded-none" />
                   <div className="absolute top-3 left-3">
-                    <PhaseBadge phase={r.phase as Phase} label={t(`phases.${r.phase as Phase}`)} className="shadow-sm" />
+                    {r.phase ? <PhaseBadge phase={r.phase as Phase} label={t(`phases.${r.phase as Phase}`)} className="shadow-sm" /> : <Pending t={t} />}
                   </div>
-                  <div className="absolute top-2.5 right-2.5 rounded-full bg-surface p-0.5 shadow-md">
-                    <ScoreRing value={r.opportunity} size={42} />
-                  </div>
+                  {r.opportunity !== null && (
+                    <div className="absolute top-2.5 right-2.5 rounded-full bg-surface p-0.5 shadow-md">
+                      <ScoreRing value={r.opportunity} size={42} />
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2 p-4">
                   <p className="truncate font-semibold">{r.canonical_title}</p>
                   <div className="flex items-center justify-between text-sm text-fg-muted">
                     <span>{formatMoney(r.min_price, r.currency, L)}</span>
-                    <DeltaBadge value={r.growth_velocity} />
+                    {r.growth_velocity !== null && <DeltaBadge value={r.growth_velocity} />}
                   </div>
                   <Sparkline values={r.demand} width={260} height={40} className="w-full" />
                   <p className="text-xs text-fg-muted">{t("products.supplyLine", { stores: r.store_count, advertisers: r.ad_count })}</p>
@@ -111,7 +126,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         ) : (
           <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
             <div className="scroll-area overflow-x-auto">
-              <table className="w-full min-w-[1250px] border-collapse">
+              <table className="w-full min-w-[1450px] border-collapse">
                 <thead className="border-b border-border bg-bg-subtle/50">
                   <tr>
                     <th className={`${head} pl-5`}>{t("products.col.product")}</th>
@@ -123,6 +138,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                     <th className={head}>{t("products.col.trend")}</th>
                     <th className={`${head} text-right`}>{t("products.col.stores")}</th>
                     <th className={`${head} text-right`}>{t("products.col.ads")}</th>
+                    <th className={`${head} text-right`}>{t("products.marketplaceOrders")}</th>
+                    <th className={`${head} text-right`}>{t("products.col.cost")}</th>
                     <th className={`${head} pr-5 text-right`}>{t("products.col.price")}</th>
                   </tr>
                 </thead>
@@ -145,28 +162,43 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <ScoreRing value={r.opportunity} size={44} />
-                      </td>
-                      <td className="w-40 px-4 py-3">
-                        <div className="tabular mb-1.5 text-sm font-semibold">{Math.round(r.validation)}</div>
-                        <SignalDots row={r} t={t} />
-                      </td>
-                      <td className="w-36 px-4 py-3">
-                        <div className="tabular mb-1.5 text-sm font-semibold">{Math.round(r.saturation * 100)}%</div>
-                        <Meter value={r.saturation * 100} invert />
-                      </td>
-                      <td className="px-4 py-3">
-                        <DeltaBadge value={r.growth_velocity} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <PhaseBadge phase={r.phase as Phase} label={t(`phases.${r.phase as Phase}`)} />
-                      </td>
+                      {r.opportunity === null || r.validation === null || r.saturation === null ? (
+                        <td colSpan={5} className="px-4 py-3">
+                          <Pending t={t} />
+                        </td>
+                      ) : (
+                        <>
+                          <td className="px-4 py-3">
+                            <ScoreRing value={r.opportunity} size={44} />
+                          </td>
+                          <td className="w-40 px-4 py-3">
+                            <div className="tabular mb-1.5 text-sm font-semibold">{Math.round(r.validation)}</div>
+                            <SignalDots row={r} t={t} />
+                          </td>
+                          <td className="w-36 px-4 py-3">
+                            <div className="tabular mb-1.5 text-sm font-semibold">{Math.round(r.saturation * 100)}%</div>
+                            <Meter value={r.saturation * 100} invert />
+                          </td>
+                          <td className="px-4 py-3">
+                            <DeltaBadge value={r.growth_velocity ?? 0} />
+                          </td>
+                          <td className="px-4 py-3">
+                            <PhaseBadge phase={r.phase as Phase} label={t(`phases.${r.phase as Phase}`)} />
+                          </td>
+                        </>
+                      )}
                       <td className="px-4 py-3">
                         <Sparkline values={r.demand} width={130} height={40} />
                       </td>
                       <td className="tabular px-4 py-3 text-right font-medium">{r.store_count}</td>
                       <td className="tabular px-4 py-3 text-right font-medium">{r.ad_count}</td>
+                      <td className="tabular px-4 py-3 text-right text-sm">
+                        {r.marketplace_orders_30d > 0 ? formatCompact(r.marketplace_orders_30d, L) : <span className="text-fg-subtle">—</span>}
+                        {r.source_count > 1 && <p className="text-xs text-fg-subtle">{t("products.sources", { count: r.source_count })}</p>}
+                      </td>
+                      <td className="tabular px-4 py-3 text-right text-sm font-medium">
+                        {r.min_supplier_cost !== null ? formatMoney(r.min_supplier_cost, "EUR", L) : <span className="text-fg-subtle">—</span>}
+                      </td>
                       <td className="tabular py-3 pr-5 pl-4 text-right text-sm font-medium whitespace-nowrap">
                         {formatMoney(r.min_price, r.currency, L)} – {formatMoney(r.max_price, r.currency, L)}
                       </td>

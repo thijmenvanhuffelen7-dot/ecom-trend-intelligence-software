@@ -80,3 +80,12 @@ def screenshots() -> dict[str, int]:
     settings = get_settings()
     with psycopg.connect(settings.database_url) as conn:
         return dict(capture_store_screenshots(conn, settings, now=datetime.now(UTC)))
+
+
+@app.task(name="trendscope.cluster")
+def cluster() -> dict[str, int]:
+    """Producten zonder cluster (nieuw van winkels of marktplaatsen) matchen op tekst + beeld."""
+    from trendscope.clustering.engine import cluster_products
+
+    with psycopg.connect(get_settings().database_url) as conn:
+        return cluster_products(conn, now=datetime.now(UTC)).as_dict()

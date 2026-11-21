@@ -17,6 +17,7 @@ from trendscope.connectors.base import ConnectorNotPermitted, LegalReview, load_
 from trendscope.core.clients import http_client_for
 from trendscope.core.http import RateLimiter, redact
 from trendscope.core.settings import Settings
+from trendscope.marketplaces.runner import MARKETPLACE_CONNECTORS, run_marketplace_target
 from trendscope.pipeline.store_crawl import CrawlOutcome, crawl_store
 from trendscope.scheduler.priority import compute_schedule
 
@@ -67,6 +68,8 @@ def run_target(
                 outcome = crawl_store(conn, ch, client, int(target["entity_id"]), target["target"], now)
             elif manifest.id in AD_CONNECTORS:
                 outcome = run_ads_target(conn, ch, client, settings, target, now)
+            elif manifest.id in MARKETPLACE_CONNECTORS:
+                outcome = run_marketplace_target(conn, ch, client, settings, target, now)
             else:
                 raise UnknownConnector(manifest.id)
     except Exception as exc:  # noqa: BLE001 — elke fout moet in crawl_jobs belanden, niet de worker laten crashen

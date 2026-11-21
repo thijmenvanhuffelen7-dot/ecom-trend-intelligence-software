@@ -2,7 +2,7 @@
 
 Trendscope is een all-in-one platform voor e-commerce trend- en concurrentie-intelligentie. Het koppelt producten, winkels, advertenties, creators, zoektrends en leveranciers aan elkaar. Elk product krijgt een **groeisnelheid**, een **validatiescore**, een **saturatiescore** en een **opportuniteitsscore**, en het platform laat altijd zien *waarom* een product zo scoort.
 
-> **Status: fase 3 is klaar (ad intelligence).** Connectors voor Meta Ad Library, TikTok Commercial Content API en Google Ads Transparency (BigQuery), koppeling van ads aan winkels en producten, schattingen met bandbreedte, creatives en winkelscreenshots in S3, en een swipe-file met boards. Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de officiële API's aanroept.
+> **Status: fase 4 is klaar (productdatabase en clustering).** Hetzelfde product wordt herkend over winkels, AliExpress, Amazon en CJ heen, op tekst én beeld, met het bewijs per match. Daarbij komen een leveranciersvinder en een margecalculator met BTW en retouren. Ad intelligence (fase 3) en store intelligence (fase 2) staan eronder. Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de officiële API's aanroept.
 > Architectuurplan: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Onderzoek naar de UX van TrendTrack: [`docs/research/trendtrack-ux.md`](docs/research/trendtrack-ux.md).
 
 | Shop Explorer | Winkeldetail |
@@ -43,11 +43,39 @@ Log in met elk e-mailadres; in dev-modus is geen wachtwoord nodig. Daarna volgt 
 | `META_AD_LIBRARY_ACCESS_TOKEN` | live ads | Meta Ad Library API (geverifieerd Meta-account + akkoord met de API-voorwaarden) |
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | live ads | TikTok Commercial Content API (toegang via aanvraag) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | live ads | BigQuery (Google Ads Transparency-dataset) |
+| `ALIEXPRESS_APP_KEY`, `ALIEXPRESS_APP_SECRET` | live marktplaatsen | AliExpress Affiliate API (Open Platform / Portals-account) |
+| `AMAZON_CREATORS_CLIENT_ID`, `AMAZON_CREATORS_CLIENT_SECRET`, `AMAZON_PARTNER_TAG` | live marktplaatsen | Amazon Creators API (Associates-account; opvolger van PA-API 5) |
+| `CJ_API_KEY` | live marktplaatsen | CJ Dropshipping API v2 |
 | `CHROME_PATH` | optioneel | Chromium voor Playwright-screenshots |
 | `ANTHROPIC_API_KEY` | fase 9 | AI-assistent en rapporten |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | fase 10 | Billing |
 
 ---
+
+## Wat er in fase 4 gebouwd is (productdatabase en clustering)
+
+- **Marktplaats-connectors**, elk met manifest en juridische notitie:
+  - **AliExpress Affiliate API**: ondertekende aanvragen (HMAC-SHA256), verkocht-in-30-dagen, beoordeling, levertijd en verkoper. Notitie: [`aliexpress_affiliate.md`](docs/sources/aliexpress_affiliate.md).
+  - **Amazon Creators API**: OAuth-token en `searchItems`, met prijs en Best Sellers Rank. Uit de BSR schatten we de maandverkopen, getoond als schatting met bandbreedte. Notitie: [`amazon_creators_api.md`](docs/sources/amazon_creators_api.md).
+  - **CJ Dropshipping API v2**: producten plus de goedkoopste verzendoptie naar NL. Notitie: [`cj_dropshipping.md`](docs/sources/cj_dropshipping.md).
+  - **Temu**: afgewezen, want er is geen officiële API ([`temu.md`](docs/sources/temu.md)). De connector staat uit en de productie-guard weigert hem.
+- **Clustering-engine** (`workers/src/trendscope/clustering/`):
+  - tekstembeddings (256-d, pgvector HNSW) en een 64-bit perceptual hash per afbeelding;
+  - een score uit tekst (cosinus + containment) en beeld;
+  - nieuwe clusters uit ongeclusterde producten van verschillende herkomst;
+  - samenvoegen van dubbele clusters, met audit in `cluster_members.evidence` en `cluster_merges`.
+- **Pipeline**: winkelcrawls slaan embeddings op en matchen snel op titel. De clustering-job (Celery beat, elke 30 minuten; CLI `trendscope cluster`) pakt de rest op. Marktplaatslistings worden direct geclusterd, en hun aanbiedingen worden leveranciers.
+- **Productdetail**:
+  - een kaart "Op marktplaatsen" met per listing verkopen, BSR (met schatting), beoordeling en het matchbewijs (tekst %, beeld %);
+  - een leveranciersvinder (totale geleverde prijs, goedkoopst/snelst) die zijn inkoop- en verzendkosten in de margecalculator zet;
+  - BTW en retouren in de calculator;
+  - vergelijkbare producten via vectorzoektocht;
+  - "Score volgt" voor nieuw ontdekte producten (geen nepscores).
+- **Producten-explorer**: bronfilter (winkels / marktplaatsen / beide), kolommen voor marktplaatsverkopen en laagste inkoop, en sorteren op marktplaatsverkopen.
+- **Admin**: de gezondheid van de clustering (aandeel geclusterd, zelf ontdekt, meerdere bronnen, samengevoegd, wachtend, zonder match).
+- **Tests**: unit-tests voor signing, parsers, BSR-schatting, scores en pHash. De integratietest controleert dat 100% van de demolistings bij het juiste product landt, plus idempotentie, prijswijzigingen en de merge-audit. E2e test de bron-filter, de detailpagina, de leverancierskeuze, "Score volgt" en admin.
+
+Zie [ADR 0004](docs/adr/0004-fase-4-producten-clustering.md).
 
 ## Wat er in fase 3 gebouwd is (ad intelligence)
 
@@ -169,16 +197,19 @@ Zie [ADR 0002](docs/adr/0002-fase-2-store-intelligence.md) en [`docs/sources/`](
 - **Creatives van Meta** komen alleen uit snapshots. Dat staat in productie uit (`META_SNAPSHOT_CAPTURE=false`) tot er juridisch akkoord is.
 - **Video-transcriptie, OCR en hook-analyse** komen in fase 9.
 - **Lokale S3:** Docker Hub publiceert geen MinIO-images meer, dus compose gebruikt `quay.io/minio/minio`.
-- **Productmatching** werkt op titel (trigram). Beeld- en tekst-embeddings komen in fase 4.
+- **Tekstembeddings** zijn hashing-gebaseerd (geen extern model): goed voor varianten van dezelfde titel, maar zonder synoniemen ("hair clip" ≠ "claw clip"). Het beeldsignaal vangt een deel op. Een echt embeddingmodel is de eerste upgrade.
+- **Amazon Creators API**: de responsstructuur is nog niet tegen een echt account geverifieerd; de parser is tolerant en de eerste echte respons moet een fixture worden.
+- **Nieuwe clusters** krijgen pas een score als de live scoring-pipeline er genoeg signalen voor heeft; tot dan staat er "Score volgt".
+- **Marktplaatsafbeeldingen** kopiëren we alleen in mock-modus naar S3 (`STORE_MARKETPLACE_IMAGES=false` in productie, tot er juridisch akkoord is); de pHash wordt wel altijd berekend.
 - **Clerk** is geïmplementeerd maar zonder echte keys niet getest.
 - Er zijn nog geen deploy-workflows (Vercel/Hetzner) en geen Terraform.
 - Afwijkingen van het oorspronkelijke plan staan in [`docs/adr/0001-fase-1-keuzes.md`](docs/adr/0001-fase-1-keuzes.md).
 
-## Volgende stap: fase 4 (productdatabase en clustering)
+## Volgende stap: fase 5 (trend- en vraagsignalen)
 
-- Productclustering met beeld (perceptual hash + CLIP-embeddings in pgvector) en tekst.
-- Marktplaatsbronnen: AliExpress (Affiliate API), Amazon, CJ en Temu, met juridische toets per bron.
-- Leveranciersvinder en een uitgebreide margecalculator.
+- Zoekvolume (Google Trends alpha-API of een datapartner), Reddit, YouTube en Pinterest als vraagsignalen per cluster.
+- Een live scoring-pipeline die dagelijks alle clusters herberekent, inclusief de nieuw ontdekte (die nu "Score volgt" tonen).
+- Een trends-pagina met opkomende zoektermen, gekoppeld aan productclusters.
 
 ## Structuur
 

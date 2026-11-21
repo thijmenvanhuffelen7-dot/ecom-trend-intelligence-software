@@ -23,6 +23,9 @@ def main() -> None:
     imp = sub.add_parser("import-domains", help="Importeer domeinen (één per regel) als kandidaten")
     imp.add_argument("file")
     sub.add_parser("index-search", help="(Her)indexeer winkels en producten in Meilisearch")
+    sub.add_parser(
+        "cluster", help="Cluster producten zonder cluster (tekst + beeld) en voeg bijna-dubbele clusters samen"
+    )
     shots = sub.add_parser("screenshots", help="Maak screenshots van ontdekte winkels (Playwright → S3)")
     shots.add_argument("--limit", type=int, default=20)
     args = parser.parse_args()
@@ -82,6 +85,16 @@ def main() -> None:
         settings = get_settings()
         with psycopg.connect(settings.database_url) as conn:
             print(dict(capture_store_screenshots(conn, settings, now=datetime.now(UTC), limit=args.limit)))
+    elif args.cmd == "cluster":
+        from datetime import UTC, datetime
+
+        import psycopg
+
+        from trendscope.clustering.engine import cluster_products
+        from trendscope.core.settings import get_settings
+
+        with psycopg.connect(get_settings().database_url) as conn:
+            print(json.dumps(cluster_products(conn, now=datetime.now(UTC)).as_dict(), indent=2))
     elif args.cmd == "connectors":
         from trendscope.connectors.base import load_manifests
 

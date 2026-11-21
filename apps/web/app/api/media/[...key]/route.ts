@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/server";
 
 // Alleen content-addressed sleutels die de workers zelf aanmaken (geen willekeurige objecten, geen SVG)
-const KEY = /^(creatives|screenshots)\/[0-9a-f]{2}\/[0-9a-f]{64}\.(jpg|png|webp|gif|mp4)$/;
+const KEY = /^(creatives|screenshots|products)\/[0-9a-f]{2}\/[0-9a-f]{64}\.(jpg|png|webp|gif|mp4)$/;
 
 const g = globalThis as unknown as { __s3?: S3Client };
 function s3() {

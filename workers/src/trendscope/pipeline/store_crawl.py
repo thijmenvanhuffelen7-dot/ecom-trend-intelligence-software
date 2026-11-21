@@ -18,6 +18,7 @@ from clickhouse_connect.driver.client import Client as ClickHouse
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from trendscope.clustering.embed import default_embedder, to_pgvector
 from trendscope.connectors.shopify.connector import ShopifyProduct, fetch_bestsellers, fetch_catalog
 from trendscope.core.http import PoliteHttpClient
 from trendscope.detect.detector import Detection, detect
@@ -248,14 +249,19 @@ def crawl_store(
             for ext in removed:
                 ids[ext] = previous_rows[ext]["id"]
 
-        # Nieuwe producten koppelen aan bestaande productclusters (titel-trigram; embeddings in fase 4)
+        # Nieuwe producten koppelen aan bestaande productclusters (snelle titel-trigram)
         matched = 0
         matched_clusters: set[int] = set()
         for pid, title in new_ids:
+            # Tekstembedding direct mee; producten zonder titelmatch pakt de clustering-job (tekst + beeld) op
+            cur.execute(
+                "UPDATE products SET embedding = %s WHERE id = %s", (to_pgvector(default_embedder.embed(title)), pid)
+            )
             cluster_id = _match_cluster(cur, title)
             if cluster_id is None:
                 continue
             matched += 1
+            cur.execute("UPDATE products SET clustered_at = %s WHERE id = %s", (now, pid))
             cur.execute(
                 "INSERT INTO cluster_members (cluster_id, product_id, confidence, method) VALUES (%s, %s, 0.8, 'title') ON CONFLICT DO NOTHING",
                 (cluster_id, pid),

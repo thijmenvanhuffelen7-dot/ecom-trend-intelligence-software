@@ -183,12 +183,12 @@ Afgedwongen in code (niet alleen in docs):
 | Reddit | officiële API | laag | Commercieel gebruik vereist betaalde/goedgekeurde toegang. |
 | YouTube | Data API v3 | laag | Quota-beperkt. |
 | Pinterest | API v5 (o.a. trends-endpoints) | laag | App-review nodig. |
-| AliExpress | Affiliate/Open Platform API | laag | Orders/reviews deels beschikbaar. |
-| CJ Dropshipping | officiële API | laag | |
-| Amazon | PA-API (affiliate-voorwaarden) | middel | Sales-schattingen via eigen BSR-model. |
+| AliExpress | Affiliate/Open Platform API | laag | Verkocht-in-30-dagen en beoordeling beschikbaar. Gebouwd in fase 4. |
+| CJ Dropshipping | officiële API | laag | Inkoop + verzendkosten. Gebouwd in fase 4. |
+| Amazon | Creators API (opvolger PA-API 5, affiliate-voorwaarden) | middel | Sales-schattingen via eigen BSR-model. Gebouwd in fase 4. |
 | TikTok Shop (Kalodata-achtige data) | **geen officiële API voor derden** | **hoog** | Alleen publieke pagina's; jurist moet expliciet akkoord geven. Alternatief: datapartner. |
 | Instagram / TikTok creators | beperkte officiële API's | hoog | Business Discovery API (IG) is beperkt; voorzichtig met persoonsgegevens (AVG). |
-| Temu, Etsy, Alibaba | Etsy: officiële API; Temu/Alibaba: geen | middel–hoog | Temu-scraping waarschijnlijk niet toegestaan volgens ToS. |
+| Temu, Etsy, Alibaba | Etsy: officiële API; Temu/Alibaba: geen | middel–hoog | Temu-scraping waarschijnlijk niet toegestaan volgens ToS. Temu is in fase 4 afgewezen (connector staat uit). |
 | Seed-mailboxen | eigen inschrijvingen | laag–middel | Eigen domeinen; alleen marketingmail van bedrijven. |
 
 **Belangrijk om vroeg te weten:** de modules die concurrenten het meest onderscheiden (TikTok Shop GMV, creator-data, non-EU Meta-ads) zijn juist de bronnen zonder officiële API. Het plan houdt die achter de connector-vlag en levert ze eerst met mockdata, zodat de rest van het product niet van die beslissing afhangt.

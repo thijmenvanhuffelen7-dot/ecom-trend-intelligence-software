@@ -1,0 +1,14 @@
+id: temu
+display_name: Temu (geen officiële API)
+kind: partner_api
+legal_basis_doc: docs/sources/temu.md
+legal_review: rejected   # geen publieke API; scraping is volgens de voorwaarden niet toegestaan
+respects_robots_txt: true
+default_rate_limit:
+  per_domain_rps: 0.1
+  global_rps: 0.1
+requires_credentials: []
+personal_data: none
+retention_days: 365
+freshness_sla_hours: 168
+module: null

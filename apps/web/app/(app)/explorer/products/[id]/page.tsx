@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Check, Eye, Factory, Heart, History, Info, Megaphone, Play, Sparkles, Star, Store, TrendingUp, Truck, Video } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Clock, Eye, Factory, Heart, History, Image as ImageIcon, Info, Megaphone, Play, ShoppingBag, Sparkles, Star, Store, TrendingUp, Type, Video } from "lucide-react";
 import type { Phase, SignalBreakdown } from "@trendscope/core";
 import { AreaChart } from "@/components/charts";
-import { MarginCalculator } from "@/components/product/margin-calculator";
+import { SupplierFinder } from "@/components/product/supplier-finder";
 import { Badge, DeltaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Flag, ShopThumb, Thumb } from "@/components/ui/misc";
@@ -18,6 +18,8 @@ import { cn, daysBetween, formatCompact, formatMoney } from "@/lib/utils";
 import { getProduct } from "@/server/queries/products";
 
 export const metadata = { title: "Product" };
+
+const MARKETPLACE_LABEL: Record<string, string> = { aliexpress: "AliExpress", amazon: "Amazon", cj: "CJ Dropshipping" };
 
 const GROUP_COLOR: Record<SignalBreakdown["group"], string> = {
   supply: "var(--chart-2)",
@@ -124,8 +126,10 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
       return { name: t(`signals.${source as "store"}`), points: points.map(([d, v]) => [d, Math.round((v / base) * 100)] as [string, number]) };
     });
 
-  const cheapest = data.offers[0];
-  const medianPrice = data.stores.length ? data.stores.map((s) => s.price ?? 0).sort((a, z) => a - z)[Math.floor(data.stores.length / 2)]! : c.min_price ?? 30;
+  const amazonPrice = data.listings.find((l) => l.source === "amazon" && l.price)?.price;
+  const medianPrice = data.stores.length
+    ? data.stores.map((s) => s.price ?? 0).sort((a, z) => a - z)[Math.floor(data.stores.length / 2)]!
+    : (c.min_price ?? amazonPrice ?? (data.offers[0] ? (data.offers[0].price + data.offers[0].shipping_cost) * 3 : 30));
 
   return (
     <div className="animate-rise">
@@ -142,19 +146,22 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
                 <span>
                   {NICHE_EMOJI[c.niche_slug ?? ""]} {L === "nl" ? c.name_nl : c.name_en}
                 </span>
-                · <span>{c.category}</span>
+                {c.category && <>· <span>{c.category}</span></>}
                 {c.is_curated && <Badge tone="accent">★ {t("products.winning")}</Badge>}
               </p>
             </div>
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <PhaseBadge phase={c.phase as Phase} label={t(`phases.${c.phase}`)} className="h-8 px-3 text-sm" />
+            {c.source_count > 1 && <Badge tone="outline">{t("products.sources", { count: c.source_count })}</Badge>}
+            {c.phase && <PhaseBadge phase={c.phase} label={t(`phases.${c.phase}`)} className="h-8 px-3 text-sm" />}
             <WatchButton entityType="product_cluster" entityId={c.id} initial={data.watching} labels={{ track: t("products.track"), tracking: t("shop.tracking") }} />
           </div>
         </div>
       </header>
 
       <div className="space-y-5 bg-bg-subtle/60 p-6">
+        {b && c.opportunity !== null && c.validation !== null && c.saturation !== null ? (
+          <>
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           <Card className="flex items-center gap-5 p-5">
             <ScoreRing value={c.opportunity} size={84} stroke={7} />
@@ -176,7 +183,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
           <ScoreCard title={t("scores.saturation")} hint={t("scores.saturationHint")} value={<span className="tabular">{Math.round(c.saturation * 100)}%</span>}>
             <Meter value={c.saturation * 100} invert />
           </ScoreCard>
-          <ScoreCard title={t("scores.growth")} hint={t("scores.growthHint")} value={<DeltaBadge value={c.growth_velocity} className="h-8 rounded-lg px-2.5 text-xl" />}>
+          <ScoreCard title={t("scores.growth")} hint={t("scores.growthHint")} value={<DeltaBadge value={c.growth_velocity ?? 0} className="h-8 rounded-lg px-2.5 text-xl" />}>
             <p className="text-sm text-fg-muted">
               7d {t("products.groups.demand").toLowerCase()}: <span className="font-semibold text-fg">{b.demand_growth_7d > 0 ? "+" : ""}{b.demand_growth_7d}%</span>
             </p>
@@ -214,35 +221,91 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
+          </>
+        ) : (
+          <Card className="flex flex-wrap items-center gap-6 p-6" data-testid="score-pending">
+            <span className="grid size-14 place-items-center rounded-2xl bg-bg-subtle">
+              <Clock className="size-6 text-fg-muted" />
+            </span>
+            <div className="max-w-xl flex-1">
+              <p className="font-semibold">{t("products.scorePending")}</p>
+              <p className="mt-1 text-sm text-fg-muted">{t("products.scorePendingHint")}</p>
+            </div>
+            <dl className="flex gap-8 text-sm">
+              <div>
+                <dt className="text-fg-muted">{t("products.marketplaceOrders")}</dt>
+                <dd className="tabular mt-0.5 text-xl font-semibold">{formatCompact(c.marketplace_orders_30d, L)}</dd>
+              </div>
+              <div>
+                <dt className="text-fg-muted">{t("products.col.stores")}</dt>
+                <dd className="tabular mt-0.5 text-xl font-semibold">{c.store_count}</dd>
+              </div>
+              <div>
+                <dt className="text-fg-muted">{t("products.minCost")}</dt>
+                <dd className="tabular mt-0.5 text-xl font-semibold">{c.min_supplier_cost !== null ? formatMoney(c.min_supplier_cost, "EUR", L) : "—"}</dd>
+              </div>
+            </dl>
+          </Card>
+        )}
+
         {/* Leveranciers + marge */}
         <Card>
           <CardHeader icon={<Factory />} title={t("products.suppliersTitle")} />
-          <CardBody className="grid gap-6 xl:grid-cols-[1fr_1.2fr]">
-            <ul className="divide-y divide-border rounded-2xl border border-border">
-              {data.offers.map((o) => {
-                const [lo, hi] = (o.shipping_days ?? "[0,0)").replace(/[[\]()]/g, "").split(",").map(Number);
-                return (
-                  <li key={o.id} className="flex items-center gap-3 px-4 py-3">
-                    <span className="grid size-9 place-items-center rounded-xl bg-bg-subtle text-xs font-bold uppercase">{o.source.slice(0, 2)}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{o.name}</p>
-                      <p className="flex items-center gap-2 text-xs text-fg-muted">
-                        <Star className="size-3 fill-warning text-warning" /> {o.rating} · <Truck className="size-3" /> {t("products.deliveryDays", { min: lo ?? 0, max: (hi ?? 1) - 1 })} · {t("products.orders", { count: o.orders ?? 0 })}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="tabular text-sm font-semibold">{formatMoney(o.price, o.currency, L)}</p>
-                      <p className="text-xs text-fg-subtle">+ {formatMoney(o.shipping_cost, o.currency, L)}</p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-            <div>
-              <p className="mb-3 text-sm font-semibold">{t("products.calculator")}</p>
-              <MarginCalculator salePrice={Number(medianPrice.toFixed(2))} productCost={cheapest ? Number((cheapest.price * 0.92).toFixed(2)) : 5} shippingCost={cheapest ? Number((cheapest.shipping_cost * 0.92).toFixed(2)) : 3} />
-            </div>
+          <CardBody>
+            <SupplierFinder offers={data.offers} salePrice={medianPrice} />
           </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader icon={<ShoppingBag />} title={t("products.marketplacesTitle")} hint={t("products.marketplacesHint")} action={<Badge>{data.listings.length}</Badge>} />
+          {data.listings.length === 0 ? (
+            <CardBody>
+              <p className="text-sm text-fg-muted">{t("products.noMarketplaces")}</p>
+            </CardBody>
+          ) : (
+            <ul className="grid gap-px border-t border-border bg-border md:grid-cols-2 xl:grid-cols-3" data-testid="marketplace-listings">
+              {data.listings.map((l) => (
+                <li key={l.id} className="flex gap-3.5 bg-surface p-4">
+                  <Thumb src={l.image} alt={l.title} className="size-16 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-2 text-xs font-semibold tracking-wide text-fg-subtle uppercase">
+                      {MARKETPLACE_LABEL[l.source] ?? l.source}
+                      {l.seller_name && <span className="truncate font-normal tracking-normal normal-case">· {l.seller_name}</span>}
+                    </p>
+                    <a href={l.url ?? "#"} target="_blank" rel="noopener noreferrer nofollow" className="mt-0.5 line-clamp-2 text-sm font-medium hover:underline">
+                      {l.title}
+                    </a>
+                    <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+                      <span className="tabular font-semibold text-fg">{formatMoney(l.price, l.currency ?? "EUR", L)}</span>
+                      {l.orders_30d ? <span>{t("products.sold30d", { count: formatCompact(l.orders_30d, L) })}</span> : null}
+                      {l.sales_rank ? (
+                        <Tooltip content={l.est_monthly_sales ? t("products.estSales", { value: `${formatCompact(l.est_monthly_sales.low, L)}–${formatCompact(l.est_monthly_sales.high, L)}` }) : (l.sales_rank_category ?? "")}>
+                          <span className="cursor-help underline decoration-dotted">{t("products.bsr", { rank: formatCompact(l.sales_rank, L) })}</span>
+                        </Tooltip>
+                      ) : null}
+                      {l.rating ? (
+                        <span className="inline-flex items-center gap-0.5">
+                          <Star className="size-3 fill-warning text-warning" /> {l.rating.toFixed(1)}
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="mt-1.5 flex flex-wrap gap-1.5">
+                      {typeof l.evidence.text === "number" && (
+                        <Badge tone="outline">
+                          <Type /> {t("products.matchText", { pct: Math.round(l.evidence.text * 100) })}
+                        </Badge>
+                      )}
+                      {typeof l.evidence.image === "number" && (
+                        <Badge tone={l.evidence.image >= 0.85 ? "accent" : "outline"}>
+                          <ImageIcon /> {t("products.matchImage", { pct: Math.round(l.evidence.image * 100) })}
+                        </Badge>
+                      )}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
         <div className="grid gap-5 xl:grid-cols-2">
@@ -308,16 +371,19 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
         </div>
 
         <Card>
-          <CardHeader icon={<Sparkles />} title={t("products.similar")} />
+          <CardHeader icon={<Sparkles />} title={t("products.similar")} hint={t("products.similarHint")} />
           <div className="grid gap-px border-t border-border bg-border sm:grid-cols-2 xl:grid-cols-5">
             {data.similar.map((s) => (
               <Link key={s.id} href={`/explorer/products/${s.id}`} className="flex items-center gap-3 bg-surface p-4 transition hover:bg-surface-hover">
                 <Thumb src={s.image_url} alt={s.canonical_title} className="size-12" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{s.canonical_title}</p>
-                  <PhaseBadge phase={s.phase as Phase} label={t(`phases.${s.phase as Phase}`)} className="mt-1" />
+                  <p className="mt-1 flex items-center gap-2">
+                    {s.phase ? <PhaseBadge phase={s.phase as Phase} label={t(`phases.${s.phase as Phase}`)} /> : <Badge>{t("products.scorePending")}</Badge>}
+                    {s.similarity !== null && <span className="tabular text-xs text-fg-subtle">{Math.round(s.similarity * 100)}%</span>}
+                  </p>
                 </div>
-                <ScoreRing value={s.opportunity} size={38} />
+                {s.opportunity !== null && <ScoreRing value={s.opportunity} size={38} />}
               </Link>
             ))}
           </div>

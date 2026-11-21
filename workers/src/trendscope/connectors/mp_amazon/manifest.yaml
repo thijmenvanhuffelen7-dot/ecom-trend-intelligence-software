@@ -1,0 +1,14 @@
+id: amazon_creators
+display_name: Amazon Creators API
+kind: official_api
+legal_basis_doc: docs/sources/amazon_creators.md
+legal_review: pending
+respects_robots_txt: false   # officiële API: de API-voorwaarden gelden
+default_rate_limit:
+  per_domain_rps: 1
+  global_rps: 1
+requires_credentials: [AMAZON_CREATORS_CLIENT_ID, AMAZON_CREATORS_CLIENT_SECRET, AMAZON_PARTNER_TAG]
+personal_data: none
+retention_days: 730
+freshness_sla_hours: 48
+module: null
