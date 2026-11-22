@@ -54,7 +54,9 @@ DEFAULT_WEIGHTS: dict[str, float] = {
 @dataclass(frozen=True)
 class Params:
     smoothing_k: float = 3.0  # vermijdt explosieve groei bij kleine aantallen
-    window_mix: tuple[float, float, float] = (0.2, 0.5, 0.3)  # gewicht van 1/7/30 dagen
+    # gewicht van 1/7/30 dagen; was (0.2, 0.5, 0.3) — de backtest liet zien dat recente groei vroege doorbraken
+    # beter voorspelt (ADR 0005). Een beetje 30d houdt het robuust tegen eendagsruis.
+    window_mix: tuple[float, float, float] = (0.3, 0.6, 0.1)
     positive_growth: float = 0.05  # log-groei (~ +5%) waarboven een signaal "positief" is
     min_positive_signals: int = 3
     gate_cap: float = 40.0  # max validatie bij te weinig onafhankelijk bewijs

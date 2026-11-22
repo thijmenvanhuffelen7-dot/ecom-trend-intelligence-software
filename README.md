@@ -2,7 +2,7 @@
 
 Trendscope is een all-in-one platform voor e-commerce trend- en concurrentie-intelligentie. Het koppelt producten, winkels, advertenties, creators, zoektrends en leveranciers aan elkaar. Elk product krijgt een **groeisnelheid**, een **validatiescore**, een **saturatiescore** en een **opportuniteitsscore**, en het platform laat altijd zien *waarom* een product zo scoort.
 
-> **Status: fase 4 is klaar (productdatabase en clustering).** Hetzelfde product wordt herkend over winkels, AliExpress, Amazon en CJ heen, op tekst én beeld, met het bewijs per match. Daarbij komen een leveranciersvinder en een margecalculator met BTW en retouren. Ad intelligence (fase 3) en store intelligence (fase 2) staan eronder. Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de officiële API's aanroept.
+> **Status: fase 5 is klaar (trenddetectie en live scoring).** Zoekinteresse per land, Reddit en hashtags komen binnen als vraagsignalen. Elke dag worden alle producten opnieuw gescoord uit echte metingen, met een uitleg per score, een forecast van 90 dagen en een backtest die laat zien hoe goed de scores voorspellen. Daaronder: productclustering en marktplaatsen (fase 4), ad intelligence (fase 3) en store intelligence (fase 2). Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de officiële API's aanroept.
 > Architectuurplan: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Onderzoek naar de UX van TrendTrack: [`docs/research/trendtrack-ux.md`](docs/research/trendtrack-ux.md).
 
 | Shop Explorer | Winkeldetail |
@@ -46,11 +46,34 @@ Log in met elk e-mailadres; in dev-modus is geen wachtwoord nodig. Daarna volgt 
 | `ALIEXPRESS_APP_KEY`, `ALIEXPRESS_APP_SECRET` | live marktplaatsen | AliExpress Affiliate API (Open Platform / Portals-account) |
 | `AMAZON_CREATORS_CLIENT_ID`, `AMAZON_CREATORS_CLIENT_SECRET`, `AMAZON_PARTNER_TAG` | live marktplaatsen | Amazon Creators API (Associates-account; opvolger van PA-API 5) |
 | `CJ_API_KEY` | live marktplaatsen | CJ Dropshipping API v2 |
+| `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` | live trends | Zoekinteresse (Google Trends via DataForSEO, tot de officiële Trends API open is) |
+| `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET` | live trends | Reddit Data API (commercieel gebruik vereist een overeenkomst met Reddit) |
 | `CHROME_PATH` | optioneel | Chromium voor Playwright-screenshots |
 | `ANTHROPIC_API_KEY` | fase 9 | AI-assistent en rapporten |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | fase 10 | Billing |
 
 ---
+
+## Wat er in fase 5 gebouwd is (trenddetectie en live scoring)
+
+- **Vraagbronnen**, elk met manifest en juridische notitie:
+  - **Zoekinteresse** per land (NL, DE, GB, US) over 2 jaar, via DataForSEO's Google Trends-endpoint ([`dataforseo_trends.md`](docs/sources/dataforseo_trends.md)). De officiële Google Trends API is nog alpha.
+  - **Reddit Data API** (OAuth): posts van de afgelopen week per zoekterm, zonder gebruikersnamen ([`reddit.md`](docs/sources/reddit.md)).
+  - **Hashtags** afgeleid uit ad-teksten die we al hebben, dus zonder extra bron.
+- **Live scoring** (`workers/src/trendscope/scoring/live.py`). Elke dag (Celery beat; CLI `trendscope score`) worden de signalen per product afgeleid uit de echte tabellen: winkels, actieve ads, marktplaatsverkopen, zoekinteresse en Reddit. Daarna wordt alles gescoord en uitgelegd. Waar een live meting aansluit op bestaande historie, wordt één schaalfactor vastgelegd (`signal_scales`), zodat er geen kunstmatige sprong ontstaat. Producten met minder dan 7 dagen data tonen "Score volgt".
+- **Forecasts** voor 90 dagen (Holt-Winters met weekritme en gedempte trend, ~90%-band, fout gemeten op de laatste 14 dagen), voor zoektermen en voor de vraag per product.
+- **Seizoenen** worden alleen herkend als het maandprofiel van het laatste jaar dat van het jaar ervoor herhaalt. Een stijger is geen seizoen.
+- **Backtesting** (`trendscope backtest`, wekelijks): de scoring draait opnieuw op 14, 21 en 30 dagen geleden, zonder kennis van daarna, en wordt vergeleken met de vraaggroei die volgde (Spearman, precisie@10, AUC tegenover de basiskans). De resultaten staan in admin.
+- **Trends-pagina** met vier tabbladen:
+  - zoektermen, met filters op land, periode, fase en niche, en het label "Nog geen product" als kans;
+  - hashtags;
+  - niches;
+  - een seizoenskalender die markeert wanneer je moet beginnen met testen.
+- **Keyword-detail**: interesse per land, forecast met band, gekoppelde producten en Reddit-posts.
+- **Productdetail**: een vraagverwachting voor 90 dagen en de zoektermen waaronder het product gezocht wordt.
+- **Tests**: unit-tests voor de parsers, forecast, seizoen, fase (identiek in Python en TypeScript) en de backtest-metrieken. De integratietest controleert fases, seizoenen, Reddit-idempotentie, kalibratie, scoring en dat de backtest de basiskans verslaat. De e2e-tests dekken de trends, de hashtags, de seizoenskalender, de forecast en de backtest in admin.
+
+Zie [ADR 0005](docs/adr/0005-fase-5-trends-scoring.md).
 
 ## Wat er in fase 4 gebouwd is (productdatabase en clustering)
 
@@ -199,17 +222,18 @@ Zie [ADR 0002](docs/adr/0002-fase-2-store-intelligence.md) en [`docs/sources/`](
 - **Lokale S3:** Docker Hub publiceert geen MinIO-images meer, dus compose gebruikt `quay.io/minio/minio`.
 - **Tekstembeddings** zijn hashing-gebaseerd (geen extern model): goed voor varianten van dezelfde titel, maar zonder synoniemen ("hair clip" ≠ "claw clip"). Het beeldsignaal vangt een deel op. Een echt embeddingmodel is de eerste upgrade.
 - **Amazon Creators API**: de responsstructuur is nog niet tegen een echt account geverifieerd; de parser is tolerant en de eerste echte respons moet een fixture worden.
-- **Nieuwe clusters** krijgen pas een score als de live scoring-pipeline er genoeg signalen voor heeft; tot dan staat er "Score volgt".
+- **Nieuwe clusters** krijgen een score zodra er 7 dagen data is; tot dan staat er "Score volgt".
+- **Zoekinteresse** is relatief (0–100 per venster). Absolute zoekvolumes en een echte Google Trends API-koppeling volgen zodra er toegang is.
+- **Backtests** op de demodata zeggen iets over de werking van de methode, niet over de echte markt. Met echte data kunnen de gewichten worden afgesteld op deze metrieken.
 - **Marktplaatsafbeeldingen** kopiëren we alleen in mock-modus naar S3 (`STORE_MARKETPLACE_IMAGES=false` in productie, tot er juridisch akkoord is); de pHash wordt wel altijd berekend.
 - **Clerk** is geïmplementeerd maar zonder echte keys niet getest.
 - Er zijn nog geen deploy-workflows (Vercel/Hetzner) en geen Terraform.
 - Afwijkingen van het oorspronkelijke plan staan in [`docs/adr/0001-fase-1-keuzes.md`](docs/adr/0001-fase-1-keuzes.md).
 
-## Volgende stap: fase 5 (trend- en vraagsignalen)
+## Volgende stap: fase 6 (TikTok Shop, creators, video's en livestreams)
 
-- Zoekvolume (Google Trends alpha-API of een datapartner), Reddit, YouTube en Pinterest als vraagsignalen per cluster.
-- Een live scoring-pipeline die dagelijks alle clusters herberekent, inclusief de nieuw ontdekte (die nu "Score volgt" tonen).
-- Een trends-pagina met opkomende zoektermen, gekoppeld aan productclusters.
+- TikTok Shop-producten en -shops, creators met groei en engagement, video's en livestreams, met GMV-schattingen die als schatting gelabeld zijn.
+- Het social- en tiktokshop-signaal in de scoring, en video-hashtags in de trends.
 
 ## Structuur
 

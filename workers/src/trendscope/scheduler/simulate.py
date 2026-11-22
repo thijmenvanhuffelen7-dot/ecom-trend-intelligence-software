@@ -19,9 +19,12 @@ from trendscope.core.clickhouse import get_client
 from trendscope.core.settings import Settings
 from trendscope.mockweb.ads_world import reset_ads_caches
 from trendscope.mockweb.transport import MockWebTransport
+from trendscope.mockweb.trend_world import reset_trend_caches
 from trendscope.mockweb.world import day_timestamp, reset_caches
 from trendscope.pipeline.store_crawl import CrawlOutcome
 from trendscope.scheduler.runner import run_target
+from trendscope.scoring.live import run_daily
+from trendscope.trends.ingest import refresh_hashtags
 
 _local = threading.local()
 
@@ -42,7 +45,9 @@ def simulate(settings: Settings, days: int, *, progress: bool = True, workers: i
         raise RuntimeError("simulate werkt alleen met DATA_MODE=mock")
     reset_caches()
     reset_ads_caches()
+    reset_trend_caches()
     totals: Counter[str] = Counter()
+    ch_main = None
     with psycopg.connect(settings.database_url) as conn:
         for day in range(1, days + 1):
             transport = MockWebTransport(day=day)
@@ -80,10 +85,32 @@ def simulate(settings: Settings, days: int, *, progress: bool = True, workers: i
 
             cstats = cluster_products(conn, now=day_timestamp(day, 23)).as_dict()
             totals.update({f"cluster_{k}": v for k, v in cstats.items()})
+            # Zoals de dagelijkse beat-job: hashtags, signalen en scores voor deze dag
+            if ch_main is None:
+                ch_main = get_client()
+            totals.update(refresh_hashtags(conn, ch_main, day_timestamp(day, 23)))
+            sstats = run_daily(
+                conn, ch_main, day_timestamp(day, 23).date(), day_timestamp(day, 23), country=settings.trend_country
+            )
+            totals["scored"] = sstats["scored"]
             if progress:
                 print(
                     f"  dag {day}/{days}: {totals['crawls']} crawls, {totals['product_added']} nieuw, "
                     f"{totals['price_changed']} prijswijzigingen, {totals.get('discovery_accepted', 0)} winkels ontdekt, "
-                    f"{totals['cluster_new_clusters']} nieuwe clusters, {totals['cluster_merged']} samengevoegd"
+                    f"{totals['cluster_new_clusters']} nieuwe clusters, {totals['scored']} gescoord"
                 )
+        # Vandaag: scores op basis van alles wat tot en met gisteren is gemeten, plus backtests
+        if ch_main is not None:
+            from datetime import UTC, datetime
+
+            from trendscope.scoring.backtest import run_backtests
+
+            today = datetime.now(UTC)
+            totals.update(
+                {
+                    f"today_{k}": v
+                    for k, v in run_daily(conn, ch_main, today.date(), today, country=settings.trend_country).items()
+                }
+            )
+            totals["backtests"] = len(run_backtests(conn, ch_main, today.date()))
     return dict(totals)

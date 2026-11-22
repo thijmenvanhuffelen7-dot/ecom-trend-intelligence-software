@@ -89,3 +89,27 @@ def cluster() -> dict[str, int]:
 
     with psycopg.connect(get_settings().database_url) as conn:
         return cluster_products(conn, now=datetime.now(UTC)).as_dict()
+
+
+@app.task(name="trendscope.score_daily")
+def score_daily() -> dict[str, int]:
+    """Hashtags bijwerken, signalen per cluster afleiden en alle clusters scoren (plus forecasts)."""
+    from trendscope.core.clickhouse import get_client
+    from trendscope.scoring.live import run_daily
+    from trendscope.trends.ingest import refresh_hashtags
+
+    settings = get_settings()
+    now = datetime.now(UTC)
+    with psycopg.connect(settings.database_url) as conn:
+        ch = get_client()
+        stats = refresh_hashtags(conn, ch, now)
+        return stats | run_daily(conn, ch, now.date(), now, country=settings.trend_country)
+
+
+@app.task(name="trendscope.backtest")
+def backtest() -> list[dict[str, Any]]:
+    from trendscope.core.clickhouse import get_client
+    from trendscope.scoring.backtest import run_backtests
+
+    with psycopg.connect(get_settings().database_url) as conn:
+        return run_backtests(conn, get_client(), datetime.now(UTC).date())

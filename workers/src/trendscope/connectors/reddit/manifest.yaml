@@ -1,0 +1,14 @@
+id: reddit
+display_name: Reddit Data API
+kind: official_api
+legal_basis_doc: docs/sources/reddit.md
+legal_review: pending
+respects_robots_txt: false   # officiële API: de Data API Terms gelden
+default_rate_limit:
+  per_domain_rps: 1   # Reddit staat ~100 verzoeken/minuut per OAuth-client toe; we blijven ruim onder
+  global_rps: 1
+requires_credentials: [REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET]
+personal_data: none   # we slaan geen gebruikersnamen op, alleen titel, subreddit en tellingen
+retention_days: 365
+freshness_sla_hours: 36
+module: null

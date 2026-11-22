@@ -85,6 +85,14 @@ def main() -> None:
         settings = get_settings()
         with psycopg.connect(settings.database_url) as conn:
             print(dict(capture_store_screenshots(conn, settings, now=datetime.now(UTC), limit=args.limit)))
+    elif args.cmd == "score":
+        from trendscope.worker.tasks import score_daily
+
+        print(json.dumps(score_daily(), indent=2))
+    elif args.cmd == "backtest":
+        from trendscope.worker.tasks import backtest
+
+        print(json.dumps(backtest(), indent=2))
     elif args.cmd == "cluster":
         from datetime import UTC, datetime
 

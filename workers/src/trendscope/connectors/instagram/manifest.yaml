@@ -1,0 +1,14 @@
+id: instagram_business
+display_name: Instagram Graph API (Business Discovery)
+kind: official_api
+legal_basis_doc: docs/sources/instagram_business.md
+legal_review: pending
+respects_robots_txt: false
+default_rate_limit:
+  per_domain_rps: 1
+  global_rps: 1
+requires_credentials: [INSTAGRAM_ACCESS_TOKEN, INSTAGRAM_USER_ID]
+personal_data: public_business
+retention_days: 365
+freshness_sla_hours: 72
+module: null

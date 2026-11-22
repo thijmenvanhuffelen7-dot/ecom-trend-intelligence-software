@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertCan, assertWithinLimit, can, dataWindowStart, formatEstimateRange, LimitExceededError, parseEstimate, unitEconomics } from "./index";
+import { assertCan, assertWithinLimit, can, dataWindowStart, formatEstimateRange, keywordTrend, LimitExceededError, parseEstimate, unitEconomics } from "./index";
 
 describe("plans", () => {
   it("blocks features not in the plan", () => {
@@ -54,5 +54,17 @@ describe("unitEconomics", () => {
     expect(r.returns).toBeCloseTo(3);
     expect(r.grossProfit).toBeCloseTo(15);
     expect(r.netMargin).toBeCloseTo(0.5);
+  });
+});
+
+describe("keywordTrend (gelijk aan de Python-worker)", () => {
+  const series = (n: number, f: (i: number) => number) => Array.from({ length: n }, (_, i) => f(i));
+  it.each([
+    [(i: number) => (i < 680 ? 2 : 2 + (i - 680) ** 1.5), "emerging"],
+    [(i: number) => 10 * Math.exp(i / 150), "rising"],
+    [(i: number) => 100 - Math.max(0, i - 650) * 0.9, "declining"],
+    [() => 50, "peak"],
+  ] as const)("fase %#", (f, phase) => {
+    expect(keywordTrend(series(730, f)).phase).toBe(phase);
   });
 });

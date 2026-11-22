@@ -24,6 +24,7 @@ from trendscope.connectors.base import load_manifests
 from trendscope.core.clickhouse import get_client
 from trendscope.core.settings import get_settings
 from trendscope.mockweb.baseline import StoreBaseline, write_baseline
+from trendscope.mockweb.trend_world import core_term
 from trendscope.scoring.engine import DEFAULT_WEIGHTS, EntityInput, Signal, score_population
 from trendscope.seed import catalog as C
 
@@ -503,7 +504,7 @@ def run(reset: bool = True) -> dict[str, int]:
                         cl = rng.choice([c for c in world.clusters if store["id"] in c["stores"]] or world.clusters)
                         hook = rng.choice(C.HOOKS).format(p=cl["title"].split()[-1].lower())
                         fmt = rng.choices(["video", "image", "carousel"], weights=[6, 3, 1])[0]
-                        body = f"{hook}\n\n{cl['title']} — free shipping today only. ⭐⭐⭐⭐⭐ 4.8/5 from 2,000+ customers."
+                        body = f"{hook}\n\n{cl['title']} — free shipping today only. ⭐⭐⭐⭐⭐ 4.8/5 from 2,000+ customers.{C.hashtags(cl['title'], store['id'])}"
                         headline = cl["title"]
                     start = sim_start - timedelta(
                         days=min(int(rng.triangular(1, 220, 12)), max(1, store["age_days"] - SIMULATION_DAYS - 1))
@@ -685,7 +686,7 @@ def run(reset: bool = True) -> dict[str, int]:
             )
             supplier_ids.append((_returned_id(cur), source))
         for cl in world.clusters:
-            term = " ".join(cl["title"].lower().split()[-2:])
+            term = core_term(cl["title"])
             cur.execute(
                 "INSERT INTO keywords (term, language, niche_id) VALUES (%s,'en',%s) ON CONFLICT DO NOTHING RETURNING id",
                 (term, world.niches[cl["niche"]]),
@@ -825,7 +826,6 @@ def run(reset: bool = True) -> dict[str, int]:
         manifests = load_manifests()
         planned = [
             ("google_trends", "Google Trends API (alpha)", "official_api", 24),
-            ("reddit", "Reddit API", "official_api", 12),
         ]
         for m in manifests.values():
             cur.execute(
@@ -932,6 +932,7 @@ def run(reset: bool = True) -> dict[str, int]:
 
     seed_ad_targets(settings.database_url, now)
     seed_marketplace_targets(settings.database_url, now)
+    seed_trend_targets(settings.database_url, now)
     return {
         "niches": len(world.niches),
         "clusters": len(world.clusters),
@@ -1029,6 +1030,35 @@ def seed_marketplace_targets(database_url: str, now: datetime) -> None:
                            VALUES (%s, %s, 50, 86400, %s)""",
                         (connector, f"q:{term}", now),
                     )
+        conn.commit()
+
+
+def seed_trend_targets(database_url: str, now: datetime) -> None:
+    """Onderwerpen zonder product als keyword, plus zoekinteresse- en Reddit-targets per keyword."""
+    from trendscope.mockweb.trend_world import TOPICS, reset_trend_caches
+
+    reset_trend_caches()
+    settings = get_settings()
+    with psycopg.connect(database_url) as conn, conn.cursor() as cur:
+        for term, niche, *_ in TOPICS:
+            cur.execute(
+                """INSERT INTO keywords (term, language, niche_id) SELECT %s, 'en', id FROM niches WHERE slug = %s
+                   ON CONFLICT DO NOTHING""",
+                (term, niche),
+            )
+        cur.execute("SELECT id FROM keywords WHERE kind = 'keyword' ORDER BY id")
+        for (kid,) in cur.fetchall():
+            for country in settings.trend_countries:
+                cur.execute(
+                    """INSERT INTO crawl_targets (connector_id, target, entity_type, entity_id, priority, interval_secs, next_run_at)
+                       VALUES ('dataforseo_trends', %s, 'keyword', %s, 50, 86400, %s)""",
+                    (f"kw:{kid}|{country}", kid, now),
+                )
+            cur.execute(
+                """INSERT INTO crawl_targets (connector_id, target, entity_type, entity_id, priority, interval_secs, next_run_at)
+                   VALUES ('reddit', %s, 'keyword', %s, 50, 86400, %s)""",
+                (f"kw:{kid}", kid, now),
+            )
         conn.commit()
 
 

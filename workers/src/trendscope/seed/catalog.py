@@ -323,3 +323,26 @@ SUPPLIERS = [
     ("alibaba", "Ningbo Kitchenware Mfg.", 4.7),
     ("aliexpress", "PetPal Supplies Store", 4.5),
 ]
+
+
+GENERIC_HASHTAGS = [
+    "tiktokmademebuyit",
+    "amazonfinds",
+    "giftideas",
+    "homefinds",
+    "cleantok",
+    "skincaretok",
+    "kitchenhacks",
+]
+
+
+def hashtags(title: str, salt: object) -> str:
+    """'#protein_pancake_mix'-achtige producttag plus een algemene tag; deterministisch per (titel, salt)."""
+    import re
+    import zlib
+
+    core = re.sub(r"[^a-z0-9]+", "", title.lower().split(" — ")[0])[:30]
+    h = zlib.crc32(f"{title}:{salt}".encode())
+    if h % 3 == 0:
+        return ""  # niet elke ad gebruikt hashtags
+    return f" #{core} #{GENERIC_HASHTAGS[h % len(GENERIC_HASHTAGS)]}"

@@ -1,0 +1,14 @@
+id: tiktok_shop_partner
+display_name: TikTok Shop & creators (datapartner)
+kind: partner_api
+legal_basis_doc: docs/sources/tiktok_shop_partner.md
+legal_review: pending   # hoog risico: alleen via een partner met aantoonbare licentie
+respects_robots_txt: false
+default_rate_limit:
+  per_domain_rps: 2
+  global_rps: 2
+requires_credentials: [TIKTOK_PARTNER_API_KEY]
+personal_data: public_business   # alleen publieke creatorprofielen en zakelijk gepubliceerde contactgegevens
+retention_days: 730
+freshness_sla_hours: 36
+module: null

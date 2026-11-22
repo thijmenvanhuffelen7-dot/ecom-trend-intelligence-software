@@ -63,6 +63,19 @@ class Settings(BaseSettings):
     marketplace_ship_to: str = "NL"
     # Productfoto's van marktplaatsen kopiëren naar S3 (weergave): pas na juridisch akkoord in live-modus
     store_marketplace_images: bool = False
+    # Fase 5: trends
+    dataforseo_login: str = ""
+    dataforseo_password: str = ""
+    reddit_client_id: str = ""
+    reddit_client_secret: str = ""
+    trend_country: str = "NL"  # markt waarvoor scores en fases worden berekend
+    trend_countries: list[str] = ["NL", "DE", "GB", "US"]
+    # Fase 6: social commerce
+    tiktok_partner_base_url: str = "https://api.tiktok-data-partner.example"  # gelicentieerde datapartner (zie docs)
+    tiktok_partner_api_key: str = ""
+    youtube_api_key: str = ""
+    instagram_access_token: str = ""  # token van je eigen Instagram Business-account (Business Discovery)
+    instagram_user_id: str = ""
 
     # Media-opslag (S3-compatibel; lokaal MinIO)
     s3_endpoint: str = "http://localhost:9002"  # 9000 is ClickHouse native

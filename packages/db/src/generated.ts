@@ -149,6 +149,16 @@ export interface AuditLogs {
   workspace_id: string | null;
 }
 
+export interface Backtests {
+  cutoff: string;
+  horizon_days: number;
+  id: Generated<Int8>;
+  metrics: Json;
+  run_at: Generated<Timestamp>;
+  top: Json;
+  weights_version: number;
+}
+
 export interface BoardItems {
   added_at: Generated<Timestamp>;
   added_by: string | null;
@@ -247,16 +257,24 @@ export interface CreativeAssets {
 
 export interface Creators {
   avatar_url: string | null;
+  avg_views: number | null;
+  bio: string | null;
   contact_public: Json | null;
+  country: string | null;
   display_name: string | null;
   engagement_rate: number | null;
   est_gmv: Json | null;
+  external_id: string | null;
   first_seen: Generated<Timestamp>;
   followers: number | null;
+  followers_growth_7d: number | null;
+  gmv_30d: Json | null;
   handle: string;
   id: Generated<Int8>;
+  last_crawled: Timestamp | null;
   niches: Generated<string[]>;
   platform: SocialPlatform;
+  videos_count: number | null;
 }
 
 export interface CuratedListItems {
@@ -297,11 +315,52 @@ export interface FeatureFlags {
   updated_at: Generated<Timestamp>;
 }
 
+export interface Forecasts {
+  computed_at: Generated<Timestamp>;
+  entity_id: Int8;
+  entity_type: EntityType;
+  mape: number | null;
+  method: string;
+  points: Json;
+  source: string;
+  trend_30d: number | null;
+}
+
 export interface Keywords {
+  first_seen: Generated<Timestamp>;
+  growth_30d: number | null;
+  growth_7d: number | null;
   id: Generated<Int8>;
+  interest: number | null;
+  kind: Generated<string>;
   language: Generated<string>;
   niche_id: Int8 | null;
+  peak_month: number | null;
+  phase: TrendPhase | null;
+  seasonality: number | null;
   term: string;
+  updated_at: Timestamp | null;
+}
+
+export interface LivestreamProducts {
+  livestream_id: Int8;
+  product_id: Int8;
+  units_sold: number | null;
+}
+
+export interface Livestreams {
+  creator_id: Int8 | null;
+  duration_min: number | null;
+  external_id: string;
+  gmv: Json | null;
+  id: Generated<Int8>;
+  peak_viewers: number | null;
+  started_at: Timestamp;
+  status: Generated<string>;
+  tiktok_shop_id: Int8 | null;
+  title: string | null;
+  total_viewers: number | null;
+  units_sold: number | null;
 }
 
 export interface Memberships {
@@ -349,6 +408,7 @@ export interface Products {
   best_seller_rank: number | null;
   category: string | null;
   clustered_at: Timestamp | null;
+  commission_rate: number | null;
   compare_at_price: Numeric | null;
   content_hash: string | null;
   currency: string | null;
@@ -374,14 +434,30 @@ export interface Products {
   shipping_cost: Numeric | null;
   shipping_days: string | null;
   ships_from: string | null;
+  sold_count: number | null;
   source: ProductSource;
   status: Generated<string>;
   store_id: Int8 | null;
   tags: Generated<string[]>;
+  tiktok_shop_id: Int8 | null;
   title: string;
   url: string | null;
   variants: Generated<Json>;
   vendor: string | null;
+}
+
+export interface RedditMentions {
+  captured_at: Generated<Timestamp>;
+  cluster_id: Int8 | null;
+  comments: Generated<number>;
+  created_at: Timestamp;
+  id: Generated<Int8>;
+  keyword_id: Int8 | null;
+  post_id: string;
+  score: Generated<number>;
+  subreddit: string;
+  title: string;
+  url: string;
 }
 
 export interface Scores {
@@ -406,6 +482,15 @@ export interface ScoreWeights {
   params: Generated<Json>;
   version: number;
   weights: Json;
+}
+
+export interface SignalScales {
+  basis: Generated<Json>;
+  created_at: Generated<Timestamp>;
+  entity_id: Int8;
+  entity_type: EntityType;
+  factor: number;
+  source: string;
 }
 
 export interface StoreCandidates {
@@ -507,6 +592,21 @@ export interface Suppliers {
   url: string | null;
 }
 
+export interface TiktokShops {
+  country: string | null;
+  external_id: string;
+  first_seen: Generated<Timestamp>;
+  followers: number | null;
+  gmv_30d: Json | null;
+  id: Generated<Int8>;
+  last_crawled: Timestamp | null;
+  name: string;
+  product_count: Generated<number>;
+  rating: number | null;
+  sold_30d: number | null;
+  store_id: Int8 | null;
+}
+
 export interface UsageCounters {
   feature: string;
   period_start: string;
@@ -529,17 +629,22 @@ export interface Users {
 
 export interface Videos {
   caption: string | null;
+  comments: Int8 | null;
   creator_id: Int8 | null;
   external_id: string;
   hashtags: Generated<string[]>;
   id: Generated<Int8>;
+  last_crawled: Timestamp | null;
   likes: Int8 | null;
   platform: SocialPlatform;
   posted_at: Timestamp | null;
+  product_id: Int8 | null;
+  shares: Int8 | null;
   sound: string | null;
   thumbnail_url: string | null;
   url: string | null;
   views: Int8 | null;
+  views_24h: Int8 | null;
 }
 
 export interface Watchlists {
@@ -571,6 +676,7 @@ export interface DB {
   alert_rules: AlertRules;
   api_keys: ApiKeys;
   audit_logs: AuditLogs;
+  backtests: Backtests;
   board_items: BoardItems;
   boards: Boards;
   cluster_members: ClusterMembers;
@@ -584,19 +690,25 @@ export interface DB {
   curated_lists: CuratedLists;
   entity_links: EntityLinks;
   feature_flags: FeatureFlags;
+  forecasts: Forecasts;
   keywords: Keywords;
+  livestream_products: LivestreamProducts;
+  livestreams: Livestreams;
   memberships: Memberships;
   niches: Niches;
   product_clusters: ProductClusters;
   products: Products;
+  reddit_mentions: RedditMentions;
   score_weights: ScoreWeights;
   scores: Scores;
+  signal_scales: SignalScales;
   store_candidates: StoreCandidates;
   store_technologies: StoreTechnologies;
   stores: Stores;
   subscriptions: Subscriptions;
   supplier_offers: SupplierOffers;
   suppliers: Suppliers;
+  tiktok_shops: TiktokShops;
   usage_counters: UsageCounters;
   users: Users;
   videos: Videos;

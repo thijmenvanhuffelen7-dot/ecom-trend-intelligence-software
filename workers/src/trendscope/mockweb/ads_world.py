@@ -75,7 +75,7 @@ def _new_meta_ad(
         title = product["title"].split(" — ")[0]
         hook = r.choice(C.HOOKS).format(p=title.split()[-1].lower())
         fmt = r.choices(["video", "image", "carousel"], weights=[6, 3, 1])[0]
-        body = f"{hook}\n\n{title} — free shipping today only. ⭐⭐⭐⭐⭐ 4.8/5 from 2,000+ customers."
+        body = f"{hook}\n\n{title} — free shipping today only. ⭐⭐⭐⭐⭐ 4.8/5 from 2,000+ customers.{C.hashtags(title, ext)}"
         headline, emoji = title, _emoji_of(product.get("image", ""))
         landing = f"https://{store.domain}/products/{product['handle']}"
     countries = sorted(set(r.sample(EU, r.randint(1, 3))) | ({store.country} if store.country in EU else set()))

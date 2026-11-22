@@ -176,3 +176,53 @@ export function BarChart({
   };
   return <Chart option={option} height={height} />;
 }
+
+export interface ForecastPoint {
+  d: string;
+  v: number;
+  lo: number;
+  hi: number;
+}
+
+/** Historie (lijn) + verwachting (stippellijn) met een ~90%-onzekerheidsband. */
+export function ForecastChart({
+  history,
+  forecast,
+  labels,
+  height = 260,
+  locale = "en",
+}: {
+  history: [string, number][];
+  forecast: ForecastPoint[];
+  labels: { actual: string; expected: string; band: string };
+  height?: number;
+  locale?: string;
+}) {
+  const p = usePalette();
+  if (!p) return <div className="skeleton rounded-xl" style={{ height }} />;
+  const last = history.at(-1);
+  // De verwachting begint bij het laatste gemeten punt, zodat de lijnen aansluiten
+  const fc: [string, number][] = [...(last ? [last] : []), ...forecast.map((f) => [f.d, f.v] as [string, number])];
+  const option: EChartsOption = {
+    ...base(p, locale),
+    legend: { top: 0, right: 0, icon: "circle", itemWidth: 8, itemHeight: 8, textStyle: { color: p.muted, fontSize: 12 }, data: [labels.actual, labels.expected, labels.band] },
+    grid: { left: 8, right: 12, top: 32, bottom: 8, containLabel: true },
+    series: [
+      { type: "line", name: "lo", data: forecast.map((f) => [f.d, f.lo]), stack: "band", lineStyle: { opacity: 0 }, showSymbol: false, silent: true, tooltip: { show: false } },
+      {
+        type: "line",
+        name: labels.band,
+        data: forecast.map((f) => [f.d, Math.max(0, f.hi - f.lo)]),
+        stack: "band",
+        lineStyle: { opacity: 0 },
+        showSymbol: false,
+        areaStyle: { color: `${p.c2}26` },
+        itemStyle: { color: `${p.c2}55` },
+        tooltip: { show: false },
+      },
+      { type: "line", name: labels.actual, data: history, smooth: 0.3, showSymbol: false, lineStyle: { width: 2, color: p.accent }, itemStyle: { color: p.accent } },
+      { type: "line", name: labels.expected, data: fc, smooth: 0.3, showSymbol: false, lineStyle: { width: 2, type: "dashed", color: p.c2 }, itemStyle: { color: p.c2 } },
+    ],
+  };
+  return <Chart option={option} height={height} />;
+}

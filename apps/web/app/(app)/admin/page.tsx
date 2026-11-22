@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AlertTriangle, Boxes, CheckCircle2, Database, ListOrdered, Radar, Scale, Shield } from "lucide-react";
+import { AlertTriangle, Boxes, FlaskConical, CheckCircle2, Database, ListOrdered, Radar, Scale, Shield } from "lucide-react";
 import { getDb, sql } from "@trendscope/db";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 async function loadAdmin() {
   const db = getDb();
-  const [connectors, weights, queue, candidates, recentCandidates, failures, clustering] = await Promise.all([
+  const [connectors, weights, queue, candidates, recentCandidates, failures, clustering, backtests] = await Promise.all([
     db
       .selectFrom("connectors as c")
       .selectAll("c")
@@ -57,8 +57,15 @@ async function loadAdmin() {
         (select count(*)::int from product_clusters where created_by = 'clustering') as auto,
         (select count(*)::int from product_clusters where source_count >= 2) as multi,
         (select count(*)::int from cluster_merges) as merges`.execute(db),
+    db
+      .selectFrom("backtests")
+      .selectAll()
+      .distinctOn("horizon_days")
+      .orderBy("horizon_days")
+      .orderBy("run_at", "desc")
+      .execute(),
   ]);
-  return { connectors, weights, queue: queue.rows[0]!, candidates, recentCandidates, failures, clustering: clustering.rows[0]! };
+  return { connectors, weights, queue: queue.rows[0]!, candidates, recentCandidates, failures, clustering: clustering.rows[0]!, backtests };
 }
 
 export default async function AdminPage() {
@@ -66,7 +73,7 @@ export default async function AdminPage() {
   if (session.role === "member" && !session.user.isPlatformAdmin) notFound();
   const t = await getT();
   const L = t.locale;
-  const { connectors, weights, queue, candidates, recentCandidates, failures, clustering } = await loadAdmin();
+  const { connectors, weights, queue, candidates, recentCandidates, failures, clustering, backtests } = await loadAdmin();
   const w = (weights?.weights ?? {}) as Record<string, number>;
   const maxW = Math.max(...Object.values(w), 1);
   const now = Date.now();
@@ -167,6 +174,44 @@ export default async function AdminPage() {
               </div>
             ))}
           </CardBody>
+        </Card>
+
+        <Card data-testid="backtests">
+          <CardHeader icon={<FlaskConical />} title={t("admin.backtests")} hint={t("admin.backtestsHint")} />
+          {backtests.length === 0 ? (
+            <CardBody>
+              <p className="text-sm text-fg-muted">{t("admin.noBacktests")}</p>
+            </CardBody>
+          ) : (
+            <table className="w-full border-t border-border text-sm">
+              <thead className="text-left text-xs text-fg-muted">
+                <tr>
+                  <th className="px-5 py-2 font-medium">{t("admin.horizon")}</th>
+                  <th className="px-3 py-2 text-right font-medium">Spearman</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("admin.precision10")}</th>
+                  <th className="px-3 py-2 text-right font-medium">AUC</th>
+                  <th className="px-5 py-2 text-right font-medium">{t("admin.baseRate")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backtests.map((b) => {
+                  const m = b.metrics as { spearman_validation: number; precision_at_10: number; auc_validation: number | null; base_rate: number; n: number };
+                  return (
+                    <tr key={b.id} className="border-t border-border">
+                      <td className="px-5 py-2.5">
+                        {t("admin.daysAhead", { days: b.horizon_days })}
+                        <span className="ml-1.5 text-xs text-fg-subtle">n={m.n}</span>
+                      </td>
+                      <td className={cn("tabular px-3 py-2.5 text-right font-semibold", m.spearman_validation > 0.3 ? "text-accent-strong" : "")}>{m.spearman_validation.toFixed(2)}</td>
+                      <td className="tabular px-3 py-2.5 text-right font-semibold">{Math.round(m.precision_at_10 * 100)}%</td>
+                      <td className="tabular px-3 py-2.5 text-right">{m.auc_validation?.toFixed(2) ?? "—"}</td>
+                      <td className="tabular px-5 py-2.5 text-right text-fg-muted">{Math.round(m.base_rate * 100)}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </Card>
 
         <Card data-testid="clustering-stats">

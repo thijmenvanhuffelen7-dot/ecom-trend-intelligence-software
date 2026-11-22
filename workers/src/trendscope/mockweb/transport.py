@@ -12,6 +12,8 @@ import httpx
 from trendscope.mockweb import pages
 from trendscope.mockweb.world import catalog, current_day, day_timestamp, sites
 
+SOCIAL_HOSTS = {"api.tiktok-data-partner.example", "cdn.tiktok-data-partner.example", "googleapis.com", "i.ytimg.com"}
+TREND_HOSTS = {"api.dataforseo.com", "reddit.com", "oauth.reddit.com"}  # host zonder "www."
 MARKETPLACE_HOSTS = {
     "api-sg.aliexpress.com",
     "ae-pic-a1.aliexpress-media.com",
@@ -50,6 +52,10 @@ class MockWebTransport(httpx.BaseTransport):
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(str(request.url))
         host = request.url.host.removeprefix("www.")
+        if host == "graph.facebook.com" and "business_discovery" in request.url.params.get("fields", ""):
+            return self._instagram(request)
+        if host in SOCIAL_HOSTS:
+            return self._social(request, host)
         if host == "graph.facebook.com":
             return self._meta(request)
         if host == "facebook.com" and request.url.path.startswith("/ads/archive/render_ad"):
@@ -61,6 +67,8 @@ class MockWebTransport(httpx.BaseTransport):
             return httpx.Response(200, html=html) if html else httpx.Response(404, text="Not found")
         if host == "open.tiktokapis.com":
             return self._tiktok(request)
+        if host in TREND_HOSTS:
+            return self._trends(request, host)
         if host in MARKETPLACE_HOSTS:
             return self._marketplace(request, host)
         if host == "crt.sh":
@@ -421,3 +429,309 @@ class MockWebTransport(httpx.BaseTransport):
                     },
                 )
         return httpx.Response(404, json={"error": "not found"})
+
+    # ── Trends: DataForSEO (Google Trends Explore) en Reddit ────────────────────────────────
+    def _trends(self, request: httpx.Request, host: str) -> httpx.Response:
+        import base64
+        from datetime import date as _date
+
+        from trendscope.mockweb import trend_world as tw
+        from trendscope.mockweb.baseline import load_baseline
+
+        today = load_baseline().day0 + timedelta(days=self.day)
+        if host == "api.dataforseo.com":
+            auth = request.headers.get("authorization", "")
+            expected = "Basic " + base64.b64encode(b"mock-dataforseo_login:mock-dataforseo_password").decode()
+            if auth != expected:
+                return httpx.Response(401, json={"status_code": 40100, "status_message": "You are not authorized."})
+            task = json.loads(request.content)[0]
+            term = task["keywords"][0]
+            country = tw.LOCATION_NAMES.get(task["location_name"], "US")
+            start = _date.fromisoformat(task["date_from"])
+            end = min(_date.fromisoformat(task["date_to"]), today)
+            points = tw.interest_window(term, country, start, end) if term in tw.keyword_specs() else []
+            data = [
+                {
+                    "date_from": d.isoformat(),
+                    "date_to": d.isoformat(),
+                    "timestamp": 0,
+                    "missing_data": False,
+                    "values": [v],
+                }
+                for d, v in points
+            ]
+            return httpx.Response(
+                200,
+                json={
+                    "status_code": 20000,
+                    "status_message": "Ok.",
+                    "tasks": [
+                        {
+                            "status_code": 20000,
+                            "status_message": "Ok.",
+                            "result": [
+                                {
+                                    "keywords": [term],
+                                    "location_code": 0,
+                                    "items": [
+                                        {
+                                            "type": "google_trends_graph",
+                                            "position": 1,
+                                            "keywords": [term],
+                                            "data": data,
+                                            "averages": [],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                },
+            )
+        if host == "reddit.com" and request.url.path == "/api/v1/access_token":
+            ok = (
+                request.headers.get("authorization", "")
+                == "Basic " + base64.b64encode(b"mock-reddit_client_id:mock-reddit_client_secret").decode()
+            )
+            if not ok or b"grant_type=client_credentials" not in request.content:
+                return httpx.Response(401, json={"error": "invalid_grant"})
+            return httpx.Response(
+                200, json={"access_token": "reddit-mock-token", "token_type": "bearer", "expires_in": 86400}
+            )
+        if host == "oauth.reddit.com" and request.url.path == "/search":
+            if request.headers.get("authorization") != "Bearer reddit-mock-token":
+                return httpx.Response(401, json={"message": "Unauthorized", "error": 401})
+            term = request.url.params.get("q", "").strip('"')
+            posts = tw.reddit_posts(term, today)
+            after = request.url.params.get("after")
+            offset = int(after.removeprefix("t3_off")) if after else 0
+            page = posts[offset : offset + 100]
+            nxt = f"t3_off{offset + 100}" if offset + 100 < len(posts) else None
+            return httpx.Response(
+                200,
+                json={
+                    "kind": "Listing",
+                    "data": {"after": nxt, "children": [{"kind": "t3", "data": {**p, "over_18": False}} for p in page]},
+                },
+            )
+        return httpx.Response(404, json={"error": "not found"})
+
+    # ── Social: TikTok-datapartner, YouTube Data API, Instagram Business Discovery ─────────────
+    def _social(self, request: httpx.Request, host: str) -> httpx.Response:
+        from datetime import UTC, datetime, time
+
+        from trendscope.mockweb import tiktok_world as tt
+        from trendscope.mockweb.baseline import load_baseline
+        from trendscope.mockweb.images import product_png
+
+        day = self.day
+        day0 = load_baseline().day0
+        path = request.url.path
+
+        def ts(d: int, hour: int = 12) -> str:
+            return datetime.combine(day0 + timedelta(days=d), time(hour), tzinfo=UTC).isoformat().replace("+00:00", "Z")
+
+        if host in ("cdn.tiktok-data-partner.example", "i.ytimg.com"):
+            seed = path.rsplit("/", 1)[-1].removesuffix(".png")
+            p = tt.products_by_id().get(seed)
+            return httpx.Response(
+                200, content=product_png(p.image_seed if p else seed, 30), headers={"content-type": "image/png"}
+            )
+
+        if host == "api.tiktok-data-partner.example":
+            if request.headers.get("x-api-key") != "mock-tiktok_partner_api_key":
+                return httpx.Response(401, json={"error": "invalid api key"})
+
+            def product_json(shop: tt.Shop, p: tt.ShopProduct) -> dict[str, object]:
+                return {
+                    "product_id": p.external_id,
+                    "shop_id": shop.external_id,
+                    "title": p.title,
+                    "price": p.price,
+                    "currency": "EUR",
+                    "sold_count": tt.sold_on(p, day),
+                    "commission_rate": p.commission,
+                    "image_url": f"https://cdn.tiktok-data-partner.example/img/{p.external_id}.png",
+                    "url": f"https://shop.tiktok.com/view/product/{p.external_id}",
+                }
+
+            parts = path.strip("/").split("/")
+            if parts[:2] == ["v1", "categories"] and parts[-1] == "top":
+                niche = parts[2]
+                return httpx.Response(
+                    200,
+                    json={
+                        "products": [product_json(s, p) for s, p in tt.top_products(niche, day)],
+                        "creators": [{"handle": c.handle} for c in tt.top_creators(niche)],
+                    },
+                )
+            if parts[:2] == ["v1", "shops"]:
+                shop = next((s for s in tt.shops() if s.external_id == parts[2]), None)
+                if not shop:
+                    return httpx.Response(404, json={"error": "shop not found"})
+                return httpx.Response(
+                    200,
+                    json={
+                        "shop": {
+                            "shop_id": shop.external_id,
+                            "name": shop.name,
+                            "country": shop.country,
+                            "rating": shop.rating,
+                            "followers": shop.followers,
+                        },
+                        "products": [product_json(shop, p) for p in shop.products],
+                    },
+                )
+            if parts[:2] == ["v1", "creators"]:
+                c = tt.creators_by_handle().get(parts[2])
+                if not c:
+                    return httpx.Response(404, json={"error": "creator not found"})
+                return httpx.Response(
+                    200,
+                    json={
+                        "creator": {
+                            "handle": c.handle,
+                            "name": c.name,
+                            "country": c.country,
+                            "followers": tt.followers_on(c, day),
+                            "bio": f"{c.niche.replace('-', ' ')} finds ✨",
+                            "avatar_url": None,
+                            "contact": {"business_email": c.business_email} if c.business_email else {},
+                        },
+                        "videos": [
+                            {
+                                "video_id": v["id"],
+                                "caption": v["caption"],
+                                "posted_at": ts(int(v["posted_day"]), 17),
+                                "views": v["views"],
+                                "likes": v["likes"],
+                                "comments": v["comments"],
+                                "shares": v["shares"],
+                                "product_id": v["product_id"],
+                                "url": f"https://www.tiktok.com/@{c.handle}/video/{v['id']}",
+                                "cover_url": f"https://cdn.tiktok-data-partner.example/cover/{v['cover_seed']}.png",
+                            }
+                            for v in tt.videos_until(c, day)
+                        ],
+                        "lives": [
+                            {
+                                "live_id": lv["id"],
+                                "title": lv["title"],
+                                "started_at": ts(int(lv["day"]), int(lv["hour"])),
+                                "duration_min": lv["duration_min"],
+                                "peak_viewers": lv["peak_viewers"],
+                                "total_viewers": lv["total_viewers"],
+                                "products": [
+                                    {"product_id": x["product_id"], "units_sold": x["units"]} for x in lv["products"]
+                                ],
+                            }
+                            for lv in tt.lives_until(c, day)
+                        ],
+                    },
+                )
+            return httpx.Response(404, json={"error": "not found"})
+
+        # YouTube Data API v3 (host zonder "www.")
+        if request.url.params.get("key") != "mock-youtube_api_key":
+            return httpx.Response(400, json={"error": {"code": 400, "message": "API key not valid."}})
+        if path == "/youtube/v3/search":
+            q = request.url.params.get("q", "").lower()
+            hits = [
+                (c, v)
+                for c in tt.creators()
+                for v in tt.videos_until(c, day)
+                if q.split(" review")[0] in str(v["caption"]).lower()
+            ][:25]
+            return httpx.Response(
+                200, json={"items": [{"id": {"kind": "youtube#video", "videoId": f"yt{v['id']}"}} for _, v in hits]}
+            )
+        if path == "/youtube/v3/videos":
+            ids = request.url.params.get("id", "").split(",")
+            items = []
+            for c in tt.creators():
+                for v in tt.videos_until(c, day):
+                    if f"yt{v['id']}" in ids:
+                        items.append(
+                            {
+                                "id": f"yt{v['id']}",
+                                "snippet": {
+                                    "channelId": f"UC{c.handle}",
+                                    "channelTitle": c.name,
+                                    "title": str(v["caption"]).split("#")[0].strip() + " (review)",
+                                    "description": "",
+                                    "publishedAt": ts(int(v["posted_day"])),
+                                    "thumbnails": {"medium": {"url": f"https://i.ytimg.com/vi/{v['cover_seed']}.png"}},
+                                },
+                                "statistics": {
+                                    "viewCount": str(int(v["views"]) // 3),
+                                    "likeCount": str(int(v["likes"]) // 3),
+                                    "commentCount": str(v["comments"]),
+                                },
+                            }
+                        )
+            return httpx.Response(200, json={"items": items})
+        if path == "/youtube/v3/channels":
+            ids = request.url.params.get("id", "").split(",")
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "id": f"UC{c.handle}",
+                            "snippet": {"title": c.name, "customUrl": f"@{c.handle}", "country": c.country},
+                            "statistics": {
+                                "subscriberCount": str(tt.followers_on(c, day) // 4),
+                                "videoCount": "120",
+                                "hiddenSubscriberCount": False,
+                            },
+                        }
+                        for c in tt.creators()
+                        if f"UC{c.handle}" in ids
+                    ]
+                },
+            )
+        return httpx.Response(404, json={"error": {"code": 404, "message": "Not found"}})
+
+    def _instagram(self, request: httpx.Request) -> httpx.Response:
+        import re as _re
+        from datetime import UTC, datetime, time
+
+        from trendscope.mockweb import tiktok_world as tt
+        from trendscope.mockweb.baseline import load_baseline
+
+        if request.url.params.get("access_token") != "mock-instagram_access_token":
+            return httpx.Response(
+                400, json={"error": {"message": "Invalid OAuth access token.", "type": "OAuthException", "code": 190}}
+            )
+        m = _re.search(r"username\(([^)]+)\)", request.url.params.get("fields", ""))
+        c = tt.creators_by_handle().get(m.group(1) if m else "")
+        if not c:
+            return httpx.Response(400, json={"error": {"message": "Invalid user id", "code": 110}})
+        day0 = load_baseline().day0
+        media = [
+            {
+                "caption": v["caption"],
+                "like_count": int(v["likes"]) // 2,
+                "comments_count": v["comments"],
+                "timestamp": datetime.combine(
+                    day0 + timedelta(days=int(v["posted_day"])), time(12), tzinfo=UTC
+                ).strftime("%Y-%m-%dT%H:%M:%S+0000"),
+                "permalink": f"https://www.instagram.com/p/{v['id']}/",
+                "media_type": "VIDEO",
+            }
+            for v in tt.videos_until(c, self.day)[:12]
+        ]
+        return httpx.Response(
+            200,
+            json={
+                "business_discovery": {
+                    "username": c.handle,
+                    "name": c.name,
+                    "followers_count": int(tt.followers_on(c, self.day) * 0.6),
+                    "media_count": 340,
+                    "profile_picture_url": None,
+                    "media": {"data": media},
+                },
+                "id": "17841400000000000",
+            },
+        )

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Check, Clock, Eye, Factory, Heart, History, Image as ImageIcon, Info, Megaphone, Play, ShoppingBag, Sparkles, Star, Store, TrendingUp, Type, Video } from "lucide-react";
 import type { Phase, SignalBreakdown } from "@trendscope/core";
-import { AreaChart } from "@/components/charts";
+import { AreaChart, ForecastChart } from "@/components/charts";
 import { SupplierFinder } from "@/components/product/supplier-finder";
 import { Badge, DeltaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -126,6 +126,21 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
       return { name: t(`signals.${source as "store"}`), points: points.map(([d, v]) => [d, Math.round((v / base) * 100)] as [string, number]) };
     });
 
+  // Vraag-index zoals de worker hem voorspelt: elk vraagsignaal gedeeld door zijn eigen gemiddelde (×100)
+  const demandSources = ["search", "social", "reddit", "tiktokshop", "marketplace"].map((src) => data.signals.get(src)).filter((p): p is [string, number][] => !!p && p.length >= 28);
+  const demandLen = Math.min(...demandSources.map((p) => p.length), 120);
+  const demandHistory: [string, number][] = demandSources.length
+    ? demandSources[0]!.slice(-demandLen).map(([d], i) => [
+        d,
+        Math.round(
+          demandSources.reduce((acc, p) => {
+            const tail = p.slice(-demandLen);
+            const mean = tail.reduce((a, x) => a + x[1], 0) / tail.length || 1;
+            return acc + (tail[i]![1] / mean) * 100;
+          }, 0) / demandSources.length,
+        ),
+      ])
+    : [];
   const amazonPrice = data.listings.find((l) => l.source === "amazon" && l.price)?.price;
   const medianPrice = data.stores.length
     ? data.stores.map((s) => s.price ?? 0).sort((a, z) => a - z)[Math.floor(data.stores.length / 2)]!
@@ -204,6 +219,35 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
                 <AreaChart series={indexSeries} locale={L} height={230} />
               </CardBody>
             </Card>
+            {data.forecast && (
+              <Card data-testid="demand-forecast">
+                <CardHeader
+                  icon={<TrendingUp />}
+                  title={t("products.demandForecast")}
+                  hint={t("trends.forecastHint")}
+                  action={data.forecast.trend_30d !== null ? <DeltaBadge value={data.forecast.trend_30d} /> : undefined}
+                />
+                <CardBody>
+                  <ForecastChart
+                    locale={L}
+                    height={200}
+                    history={demandHistory}
+                    forecast={data.forecast.points}
+                    labels={{ actual: t("trends.actual"), expected: t("trends.expected"), band: t("trends.band") }}
+                  />
+                  {data.keywords.length > 0 && (
+                    <p className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-fg-muted">
+                      {t("products.searchedAs")}
+                      {data.keywords.map((k) => (
+                        <Link key={k.id} href={`/trends/${k.id}`} className="rounded-full border border-border px-2 py-0.5 font-medium text-fg hover:bg-surface-hover">
+                          {k.term}
+                        </Link>
+                      ))}
+                    </p>
+                  )}
+                </CardBody>
+              </Card>
+            )}
             <Card>
               <CardHeader icon={<History />} title={t("products.scoreHistory")} />
               <CardBody>

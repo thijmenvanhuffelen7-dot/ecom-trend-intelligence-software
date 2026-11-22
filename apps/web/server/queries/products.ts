@@ -93,7 +93,7 @@ export async function getProduct(id: number, workspaceId: string) {
     .executeTakeFirst();
   if (!cluster) return null;
 
-  const [stores, ads, videos, offers, similar, signals, history, watching, listings] = await Promise.all([
+  const [stores, ads, videos, offers, similar, signals, history, watching, listings, forecast, keywords] = await Promise.all([
     db
       .selectFrom("cluster_members as m")
       .innerJoin("products as p", "p.id", "m.product_id")
@@ -190,6 +190,15 @@ export async function getProduct(id: number, workspaceId: string) {
       .orderBy("p.sales_rank", sql`asc nulls last`)
       .limit(12)
       .execute(),
+    db.selectFrom("forecasts").selectAll().where("entity_type", "=", "product_cluster").where("entity_id", "=", cluster.id).where("source", "=", "demand").executeTakeFirst(),
+    db
+      .selectFrom("entity_links as l")
+      .innerJoin("keywords as k", "k.id", "l.from_id")
+      .select(["k.id", "k.term", "k.phase", "k.growth_30d", "k.peak_month"])
+      .where("l.from_type", "=", "keyword")
+      .where("l.to_type", "=", "product_cluster")
+      .where("l.to_id", "=", cluster.id)
+      .execute(),
   ]);
 
   const bySource = new Map<string, [string, number][]>();
@@ -206,6 +215,8 @@ export async function getProduct(id: number, workspaceId: string) {
       evidence: l.evidence as { text?: number; image?: number | null; cosine?: number; containment?: number },
       est_monthly_sales: l.est_monthly_sales as { value: number; low: number; high: number; confidence: string } | null,
     })),
+    forecast: forecast ? { ...forecast, points: forecast.points as unknown as { d: string; v: number; lo: number; hi: number }[] } : null,
+    keywords,
     stores,
     ads,
     videos,

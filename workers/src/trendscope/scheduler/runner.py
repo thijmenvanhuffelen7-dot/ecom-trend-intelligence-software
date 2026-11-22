@@ -20,6 +20,8 @@ from trendscope.core.settings import Settings
 from trendscope.marketplaces.runner import MARKETPLACE_CONNECTORS, run_marketplace_target
 from trendscope.pipeline.store_crawl import CrawlOutcome, crawl_store
 from trendscope.scheduler.priority import compute_schedule
+from trendscope.social.ingest import SOCIAL_CONNECTORS, run_social_target
+from trendscope.trends.ingest import TREND_CONNECTORS, run_trends_target
 
 
 class UnknownConnector(Exception):
@@ -70,6 +72,10 @@ def run_target(
                 outcome = run_ads_target(conn, ch, client, settings, target, now)
             elif manifest.id in MARKETPLACE_CONNECTORS:
                 outcome = run_marketplace_target(conn, ch, client, settings, target, now)
+            elif manifest.id in TREND_CONNECTORS:
+                outcome = run_trends_target(conn, ch, client, settings, target, now)
+            elif manifest.id in SOCIAL_CONNECTORS:
+                outcome = run_social_target(conn, ch, client, settings, target, now)
             else:
                 raise UnknownConnector(manifest.id)
     except Exception as exc:  # noqa: BLE001 — elke fout moet in crawl_jobs belanden, niet de worker laten crashen
