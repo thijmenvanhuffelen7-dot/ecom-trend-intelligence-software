@@ -6,6 +6,8 @@ import { ShopCard, ShopTable } from "@/components/explorer/shop-results";
 import { EmptyState } from "@/components/ui/misc";
 import { getT } from "@/lib/i18n/server";
 import { requireSession } from "@/lib/auth/server";
+import { LimitBanner } from "@/components/billing/limit-banner";
+import { consumeSearch } from "@/server/billing/limits";
 import { NICHE_EMOJI } from "@/lib/niches";
 import { flagEmoji, formatCompact } from "@/lib/utils";
 import { activeFilterCount, NEW_LAUNCHES_VIEW, PAGE_SIZE, parseShopFilters, searchShops, shopFacets, SHOP_SORTS } from "@/server/queries/shops";
@@ -16,10 +18,12 @@ export const metadata = { title: "Shops" };
 const FILTER_PARAMS = ["niche", "origin", "vc", "traffic", "tg", "products", "created", "pixels", "apps", "lang", "theme", "cur", "platform", "ads", "ag", "q", "view"];
 
 export default async function ShopsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  await requireSession();
+  const session = await requireSession();
   const sp = await searchParams;
   const t = await getT();
   const filters = parseShopFilters(sp);
+  const searchLimited = !!filters.q && !(await consumeSearch(session));
+  if (searchLimited) filters.q = undefined;
   const [facets, result] = await Promise.all([shopFacets(), searchShops(filters)]);
   const nicheNames = Object.fromEntries(facets.niches.map((n) => [n.slug, t.locale === "nl" ? n.name_nl : n.name_en]));
   const countryName = new Intl.DisplayNames([t.locale], { type: "region" });
@@ -41,6 +45,7 @@ export default async function ShopsPage({ searchParams }: { searchParams: Promis
       />
 
       <div className="space-y-4 bg-bg-subtle/60 px-6 pt-4 pb-6">
+        {searchLimited && <LimitBanner message={t("billing.searchLimit")} cta={t("billing.upgradeCta")} />}
         <SavedViews
           allLabel={t("explorer.allShops")}
           views={[

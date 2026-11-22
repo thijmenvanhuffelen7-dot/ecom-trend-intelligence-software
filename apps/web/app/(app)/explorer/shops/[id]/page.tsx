@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PLANS } from "@trendscope/core";
 import { notFound } from "next/navigation";
 import { ArrowLeft, BadgeEuro, CalendarDays, Globe, History, Megaphone, Package, Play, Radar, Sparkles, Star, Users } from "lucide-react";
 import { DeltaBadge } from "@/components/ui/badge";
@@ -64,7 +65,7 @@ export default async function ShopPage({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const t = await getT();
   if (!/^\d+$/.test(id)) notFound();
-  const data = await getShop(Number(id), session.workspace.id);
+  const data = await getShop(Number(id), session.workspace.id, PLANS[session.workspace.plan].dataWindowDays);
   if (!data) notFound();
   const { shop } = data;
   const L = t.locale;

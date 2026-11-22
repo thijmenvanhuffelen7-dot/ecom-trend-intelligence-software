@@ -19,7 +19,8 @@ pytestmark = [
     pytest.mark.skipif(not os.environ.get("RUN_INTEGRATION"), reason="zet RUN_INTEGRATION=1"),
 ]
 
-NOW = datetime(2026, 11, 22, 9, 0, tzinfo=UTC)
+# Relatief aan de echte klok: bezorgingen krijgen next_attempt_at = now() van de database
+NOW = datetime.now(UTC) + timedelta(minutes=1)
 
 
 @pytest.fixture()

@@ -2,7 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { getDb } from "@trendscope/db";
+import { getDb, sql } from "@trendscope/db";
 import type { PlanId, Role } from "@trendscope/core";
 import { SESSION_COOKIE, verifySession } from "./token";
 
@@ -20,7 +20,10 @@ export function authSecret(): string {
 
 export interface Session {
   user: { id: string; email: string; name: string | null; isPlatformAdmin: boolean; onboarded: boolean };
-  workspace: { id: string; name: string; slug: string; plan: PlanId; niches: string[]; countries: string[] };
+  workspace: {
+    id: string; name: string; slug: string; plan: PlanId; niches: string[]; countries: string[];
+    billingStatus: string; trialEndsAt: Date | null;
+  };
   role: Role;
 }
 
@@ -35,8 +38,21 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "workspace";
 }
 
+/**
+ * Platformbeheerders (toegang tot /admin): `users.is_platform_admin`, of een e-mailadres/domein in PLATFORM_ADMIN_EMAILS
+ * (komma-gescheiden; "@domein.nl" voor een heel domein). Workspace-eigenaren zijn géén platformbeheerders.
+ */
+export function isConfiguredAdmin(email: string): boolean {
+  const list = (process.env.PLATFORM_ADMIN_EMAILS ?? "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+  const e = email.toLowerCase();
+  return list.some((x) => (x.startsWith("@") ? e.endsWith(x) : e === x));
+}
+
 /** Zoekt of maakt gebruiker, workspace en lidmaatschap. Idempotent; draait bij elke eerste request per sessie. */
-export async function provision(identity: Identity): Promise<Session> {
+/** Cookie met de gekozen workspace als iemand lid is van meerdere (na een uitnodiging). Alleen een voorkeur: lidmaatschap wordt altijd gecontroleerd. */
+export const WORKSPACE_COOKIE = "ts_ws";
+
+export async function provision(identity: Identity, preferredWorkspaceId?: string): Promise<Session> {
   const db = getDb();
   return db.transaction().execute(async (trx) => {
     const user = await trx
@@ -67,6 +83,8 @@ export async function provision(identity: Identity): Promise<Session> {
         .selectFrom("memberships")
         .select(["workspace_id", "role"])
         .where("user_id", "=", user.id)
+        // Eerst de gekozen workspace (als je daar nog lid van bent), anders de oudste
+        .orderBy(sql`workspace_id = ${preferredWorkspaceId && /^[0-9a-f-]{36}$/.test(preferredWorkspaceId) ? preferredWorkspaceId : null}::uuid`, sql`desc nulls last`)
         .orderBy("created_at")
         .executeTakeFirst();
       if (existing) {
@@ -82,6 +100,8 @@ export async function provision(identity: Identity): Promise<Session> {
             // Nieuwe workspaces starten met een Pro-trial van 7 dagen
             plan: "pro",
             trial_ends_at: new Date(Date.now() + 7 * 86_400_000),
+            billing_status: "trialing",
+            trial_used: true,
           })
           .returning("id")
           .executeTakeFirstOrThrow();
@@ -91,10 +111,22 @@ export async function provision(identity: Identity): Promise<Session> {
       }
     }
 
-    const workspace = await trx.selectFrom("workspaces").selectAll().where("id", "=", workspaceId).executeTakeFirstOrThrow();
+    let workspace = await trx.selectFrom("workspaces").selectAll().where("id", "=", workspaceId).executeTakeFirstOrThrow();
+    // Trial verlopen zonder betaald abonnement → terug naar Free (de data blijft, de limieten gaan omlaag)
+    if (workspace.billing_status === "trialing" && workspace.trial_ends_at && new Date(workspace.trial_ends_at) < new Date()) {
+      workspace = await trx
+        .updateTable("workspaces")
+        .set({ plan: "free", billing_status: "none", updated_at: new Date() })
+        .where("id", "=", workspaceId)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+    }
     return {
-      user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin: user.is_platform_admin, onboarded: !!user.onboarded_at },
-      workspace: { id: workspace.id, name: workspace.name, slug: workspace.slug, plan: workspace.plan, niches: workspace.niches, countries: workspace.countries },
+      user: { id: user.id, email: user.email, name: user.name, isPlatformAdmin: user.is_platform_admin || isConfiguredAdmin(user.email), onboarded: !!user.onboarded_at },
+      workspace: {
+        id: workspace.id, name: workspace.name, slug: workspace.slug, plan: workspace.plan, niches: workspace.niches, countries: workspace.countries,
+        billingStatus: workspace.billing_status, trialEndsAt: workspace.trial_ends_at ? new Date(workspace.trial_ends_at) : null,
+      },
       role,
     };
   });
@@ -120,11 +152,13 @@ async function clerkIdentity(): Promise<Identity | null> {
 export const getSession = cache(async (): Promise<Session | null> => {
   if (authMode() === "clerk") {
     const identity = await clerkIdentity();
-    return identity ? provision(identity) : null;
+    // Clerk-organisatie bepaalt de workspace; zonder organisatie geldt dezelfde voorkeurscookie als in dev
+    return identity ? provision(identity, identity.org ? undefined : (await cookies()).get(WORKSPACE_COOKIE)?.value) : null;
   }
   const payload = await verifySession((await cookies()).get(SESSION_COOKIE)?.value, authSecret());
   if (!payload) return null;
-  return provision({ providerId: `dev:${payload.email}`, email: payload.email, name: null });
+  const jar = await cookies();
+  return provision({ providerId: `dev:${payload.email}`, email: payload.email, name: null }, jar.get(WORKSPACE_COOKIE)?.value);
 });
 
 export async function requireSession(): Promise<Session> {

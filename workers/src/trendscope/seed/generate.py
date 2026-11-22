@@ -140,7 +140,7 @@ def run(reset: bool = True) -> dict[str, int]:
                    scores, score_weights, connectors, crawl_targets, crawl_jobs, curated_lists, curated_list_items,
                    watchlists, alert_rules, alert_events, store_candidates, cluster_merges, reddit_mentions,
                    signal_scales, forecasts, backtests, tiktok_shops, livestreams, livestream_products, mailboxes,
-                   email_subscriptions, emails RESTART IDENTITY CASCADE"""
+                   email_subscriptions, emails, feature_flags RESTART IDENTITY CASCADE"""
             )
             for table in (
                 "product_snapshots",
@@ -763,6 +763,21 @@ def run(reset: bool = True) -> dict[str, int]:
             "INSERT INTO score_weights (version, weights, params, is_active, note) VALUES (1,%s,'{}',true,'Startgewichten')",
             (Jsonb(DEFAULT_WEIGHTS),),
         )
+        # Feature flags voor de functies uit fase 11 (beheer in /admin → Feature flags)
+        for key, desc, rollout in (
+            ("chrome_extension", "Chrome-extensie: winkel- en productanalyse op elke webshop", {"percent": 100}),
+            (
+                "push_to_store",
+                "Product met één klik als concept naar je Shopify-winkel",
+                {"percent": 100, "plans": ["pro", "business"]},
+            ),
+            ("public_api", "Publieke REST API v1 met API-sleutels", {"percent": 100, "plans": ["business"]}),
+        ):
+            cur.execute(
+                """INSERT INTO feature_flags (key, description, enabled, rollout) VALUES (%s, %s, true, %s)
+                   ON CONFLICT (key) DO NOTHING""",
+                (key, desc, Jsonb(rollout)),
+            )
         history_rows: list[list[Any]] = []
         latest = []
         for back in range(SCORE_HISTORY_DAYS - 1, -1, -1):

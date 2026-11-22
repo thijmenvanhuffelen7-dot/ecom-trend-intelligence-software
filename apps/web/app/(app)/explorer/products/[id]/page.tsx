@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PLANS } from "@trendscope/core";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Check, Clapperboard, Clock, Eye, Factory, Heart, History, Image as ImageIcon, Info, Megaphone, Play, ShoppingBag, Sparkles, Star, Store, TrendingUp, Type, Video } from "lucide-react";
 import type { Phase, SignalBreakdown } from "@trendscope/core";
@@ -114,7 +115,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   if (!/^\d+$/.test(id)) notFound();
   const t = await getT();
-  const data = await getProduct(Number(id), session.workspace.id);
+  const data = await getProduct(Number(id), session.workspace.id, PLANS[session.workspace.plan].dataWindowDays);
   if (!data) notFound();
   const aiLocale = t.locale === "en" ? "en" : "nl";
   const [tiktok, aiReport, aiCopy] = await Promise.all([

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { Settings } from "lucide-react";
 import { PLANS } from "@trendscope/core";
@@ -6,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Segmented } from "@/components/preference-switch";
 import { requireSession } from "@/lib/auth/server";
 import { getT } from "@/lib/i18n/server";
+import { TeamSection } from "@/components/team/team-section";
 
 export const metadata = { title: "Settings" };
 
@@ -16,7 +18,7 @@ export default async function SettingsPage() {
   const plan = PLANS[session.workspace.plan];
   const rows: [string, React.ReactNode][] = [
     [t("settings.workspace"), session.workspace.name],
-    [t("settings.plan"), <Badge key="p" tone="accent" className="capitalize">{plan.id}</Badge>],
+    [t("settings.plan"), <span key="p" className="flex items-center gap-2"><Badge tone="accent" className="capitalize">{plan.id}</Badge><Link href="/settings/billing" className="text-sm font-medium text-accent-strong hover:underline">{t("billing.title")} →</Link></span>],
     [t("settings.role"), <Badge key="r" className="capitalize">{session.role}</Badge>],
     [t("settings.language"), <Segmented key="l" kind="locale" value={t.locale} options={[{ value: "nl", label: "Nederlands" }, { value: "en", label: "English" }]} />],
     [t("settings.theme"), <Segmented key="t" kind="theme" value={theme} options={[{ value: "light", label: t("settings.light") }, { value: "dark", label: t("settings.dark") }]} />],
@@ -32,7 +34,7 @@ export default async function SettingsPage() {
         </h1>
         <p className="mt-2 text-fg-muted">{session.user.email}</p>
       </header>
-      <div className="bg-bg-subtle/60 p-6">
+      <div className="space-y-5 bg-bg-subtle/60 p-6">
         <Card className="max-w-2xl divide-y divide-border">
           {rows.map(([k, v]) => (
             <div key={k} className="flex items-center justify-between gap-4 px-5 py-4">
@@ -41,6 +43,7 @@ export default async function SettingsPage() {
             </div>
           ))}
         </Card>
+        <TeamSection session={session} t={t} />
       </div>
     </div>
   );

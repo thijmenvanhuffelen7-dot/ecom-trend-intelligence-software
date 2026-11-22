@@ -3,7 +3,7 @@ import { getDb, sql } from "@trendscope/db";
 import { parseEstimate } from "@trendscope/core";
 import { chQuery } from "../clickhouse";
 
-export async function getShop(id: number, workspaceId: string) {
+export async function getShop(id: number, workspaceId: string, windowDays = 366) {
   const db = getDb();
   const shop = await db
     .selectFrom("stores as s")
@@ -54,8 +54,8 @@ export async function getShop(id: number, workspaceId: string) {
     db.selectFrom("watchlists").select("id").where("workspace_id", "=", workspaceId).where("entity_type", "=", "store").where("entity_id", "=", shop.id).executeTakeFirst(),
     chQuery<{ metric: string; d: string; value: number }>(
       `SELECT metric, toString(date) AS d, value FROM store_metrics_daily FINAL
-       WHERE store_id = {id:UInt64} AND date >= today() - 366 ORDER BY metric, date`,
-      { id },
+       WHERE store_id = {id:UInt64} AND date >= today() - {days:UInt32} ORDER BY metric, date`,
+      { id, days: Math.min(366, windowDays) },
     ),
     chQuery<{ type: string; at: string; payload: string }>(
       `SELECT event_type AS type, toString(occurred_at) AS at, payload FROM change_events

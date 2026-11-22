@@ -9,6 +9,8 @@ import { Meter, PhaseBadge, ScoreRing } from "@/components/ui/score";
 import { Sparkline } from "@/components/ui/sparkline";
 import { Tooltip } from "@/components/ui/tooltip";
 import { requireSession } from "@/lib/auth/server";
+import { LimitBanner } from "@/components/billing/limit-banner";
+import { consumeSearch } from "@/server/billing/limits";
 import { getT } from "@/lib/i18n/server";
 import { NICHE_EMOJI } from "@/lib/niches";
 import { formatCompact, formatMoney } from "@/lib/utils";
@@ -59,10 +61,13 @@ function SignalDots({ row, t }: { row: ProductRow; t: Translator }) {
 }
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  await requireSession();
+  const session = await requireSession();
   const sp = await searchParams;
   const t = await getT();
   const f = parseProductFilters(sp);
+  // Zoekopdrachten tellen per dag mee voor de planlimiet; boven de limiet tonen we de lijst zonder zoekterm
+  const searchLimited = !!f.q && !(await consumeSearch(session));
+  if (searchLimited) f.q = undefined;
   const [result, niches] = await Promise.all([searchProducts(f), getDb().selectFrom("niches").select(["slug", "name_nl", "name_en"]).orderBy("name_en").execute()]);
   const L = t.locale;
   const nicheName = Object.fromEntries(niches.map((n) => [n.slug, L === "nl" ? n.name_nl : n.name_en]));
@@ -74,6 +79,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
     <>
       <ExplorerHeader count={String(result.total)} countLabel={t("explorer.products").toLowerCase()} searchPlaceholder={t("explorer.searchProducts")} demo={{ label: t("explorer.demoData"), hint: t("explorer.demoDataHint") }} />
       <div className="space-y-4 bg-bg-subtle/60 px-6 pt-5 pb-6">
+        {searchLimited && <LimitBanner message={t("billing.searchLimit")} cta={t("billing.upgradeCta")} />}
         <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="flex flex-wrap items-center gap-2.5">
             <MultiFilter param="niche" label={t("products.filter.niche")} icon={<Sparkles />} options={niches.map((n) => ({ value: n.slug, label: nicheName[n.slug]!, prefix: <span>{NICHE_EMOJI[n.slug]}</span> }))} />

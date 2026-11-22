@@ -1,9 +1,13 @@
 import { notFound } from "next/navigation";
-import { AlertTriangle, Boxes, FlaskConical, CheckCircle2, Database, ListOrdered, Radar, Scale, Shield } from "lucide-react";
+import { AlertTriangle, Boxes, FlaskConical, CheckCircle2, Database, ListOrdered, Radar, Scale } from "lucide-react";
 import { getDb, sql } from "@trendscope/db";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import Link from "next/link";
 import { requireSession } from "@/lib/auth/server";
+import { AdminHeader, AdminNav, CurationTab, FlagsTab, UsersTab, WeightsTab } from "@/components/admin/admin-tabs";
+import { ADMIN_TABS, type AdminTab } from "@/server/queries/admin";
+import type { SearchParams } from "@/server/queries/params";
 import { getT } from "@/lib/i18n/server";
 import { cn, formatDateTime, formatNumber } from "@/lib/utils";
 
@@ -68,11 +72,25 @@ async function loadAdmin() {
   return { connectors, weights, queue: queue.rows[0]!, candidates, recentCandidates, failures, clustering: clustering.rows[0]!, backtests };
 }
 
-export default async function AdminPage() {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const session = await requireSession();
-  if (session.role === "member" && !session.user.isPlatformAdmin) notFound();
+  if (!session.user.isPlatformAdmin) notFound(); // platformbeheer, niet voor workspace-eigenaren
   const t = await getT();
   const L = t.locale;
+  const sp = await searchParams;
+  const tab: AdminTab = (ADMIN_TABS as readonly string[]).includes(String(sp.tab)) ? (sp.tab as AdminTab) : "overview";
+  const q = typeof sp.q === "string" ? sp.q.trim().slice(0, 80) || undefined : undefined;
+  const nav = <AdminNav tab={tab} t={t} />;
+  if (tab !== "overview") {
+    return (
+      <div className="animate-rise">
+        <AdminHeader t={t}>{nav}</AdminHeader>
+        <div className="p-6">
+          {tab === "users" ? <UsersTab t={t} q={q} selfId={session.user.id} /> : tab === "weights" ? <WeightsTab t={t} /> : tab === "flags" ? <FlagsTab t={t} /> : <CurationTab t={t} q={q} />}
+        </div>
+      </div>
+    );
+  }
   const { connectors, weights, queue, candidates, recentCandidates, failures, clustering, backtests } = await loadAdmin();
   const w = (weights?.weights ?? {}) as Record<string, number>;
   const maxW = Math.max(...Object.values(w), 1);
@@ -81,13 +99,7 @@ export default async function AdminPage() {
 
   return (
     <div className="animate-rise">
-      <header className="border-b border-border bg-bg px-8 pt-9 pb-7">
-        <h1 className="flex items-center gap-3 text-[28px] font-semibold tracking-tight">
-          <span className="grid size-10 place-items-center rounded-xl bg-bg-subtle">
-            <Shield className="size-5" />
-          </span>
-          {t("admin.title")}
-        </h1>
+      <AdminHeader t={t}>
         <div className="mt-6 grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
           {(
             [
@@ -105,7 +117,8 @@ export default async function AdminPage() {
             </div>
           ))}
         </div>
-      </header>
+        {nav}
+      </AdminHeader>
 
       <div className="grid gap-5 p-6 xl:grid-cols-[1.7fr_1fr]">
         <Card className="overflow-hidden">
@@ -162,7 +175,7 @@ export default async function AdminPage() {
         </Card>
 
         <Card>
-          <CardHeader icon={<Scale />} title={t("admin.weights")} action={<Badge>v{weights?.version}</Badge>} />
+          <CardHeader icon={<Scale />} title={t("admin.weights")} action={<Link href="/admin?tab=weights" className="text-sm font-medium text-accent-strong hover:underline">v{weights?.version} →</Link>} />
           <CardBody className="space-y-3">
             {Object.entries(w).map(([k, v]) => (
               <div key={k} className="grid grid-cols-[130px_1fr_40px] items-center gap-3 text-sm">

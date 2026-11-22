@@ -81,7 +81,7 @@ export async function searchProducts(f: ProductFilters) {
 
 export type ProductRow = Awaited<ReturnType<typeof searchProducts>>["rows"][number];
 
-export async function getProduct(id: number, workspaceId: string) {
+export async function getProduct(id: number, workspaceId: string, windowDays = 365) {
   const db = getDb();
   const cluster = await db
     .selectFrom("product_clusters as c")
@@ -166,13 +166,13 @@ export async function getProduct(id: number, workspaceId: string) {
           .execute(),
     chQuery<{ source: string; d: string; value: number }>(
       `SELECT source, toString(date) AS d, value FROM entity_signals_daily FINAL
-       WHERE entity_type = 'product_cluster' AND entity_id = {id:UInt64} ORDER BY source, date`,
-      { id },
+       WHERE entity_type = 'product_cluster' AND entity_id = {id:UInt64} AND date >= today() - {days:UInt32} ORDER BY source, date`,
+      { id, days: windowDays },
     ),
     chQuery<{ d: string; opportunity: number; validation: number; saturation: number }>(
       `SELECT toString(date) AS d, opportunity, validation, saturation * 100 AS saturation FROM score_history FINAL
-       WHERE entity_type = 'product_cluster' AND entity_id = {id:UInt64} ORDER BY date`,
-      { id },
+       WHERE entity_type = 'product_cluster' AND entity_id = {id:UInt64} AND date >= today() - {days:UInt32} ORDER BY date`,
+      { id, days: windowDays },
     ),
     db.selectFrom("watchlists").select("id").where("workspace_id", "=", workspaceId).where("entity_type", "=", "product_cluster").where("entity_id", "=", cluster.id).executeTakeFirst(),
     db

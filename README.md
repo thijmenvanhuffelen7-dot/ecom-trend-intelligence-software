@@ -2,7 +2,7 @@
 
 Trendscope is een all-in-one platform voor e-commerce trend- en concurrentie-intelligentie. Het koppelt producten, winkels, advertenties, creators, zoektrends en leveranciers aan elkaar. Elk product krijgt een **groeisnelheid**, een **validatiescore**, een **saturatiescore** en een **opportuniteitsscore**, en het platform laat altijd zien *waarom* een product zo scoort.
 
-> **Status: fase 9 is klaar (AI-assistent).** Daaronder: alerts en integraties (fase 8), e-mailmarketing en funnels (fase 7), TikTok Shop en creators (fase 6), trenddetectie en live scoring (fase 5), productclustering en marktplaatsen (fase 4), ad intelligence (fase 3) en store intelligence (fase 2). Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de echte API's aanroept.
+> **Status: fase 10 is klaar (billing, limieten, team en admin).** Daaronder: AI-assistent (fase 9), alerts en integraties (fase 8), e-mailmarketing en funnels (fase 7), TikTok Shop en creators (fase 6), trenddetectie en live scoring (fase 5), productclustering en marktplaatsen (fase 4), ad intelligence (fase 3) en store intelligence (fase 2). Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de echte API's aanroept.
 > Architectuurplan: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Onderzoek naar de UX van TrendTrack: [`docs/research/trendtrack-ux.md`](docs/research/trendtrack-ux.md).
 
 | Shop Explorer | Winkeldetail |
@@ -62,6 +62,35 @@ Log in met elk e-mailadres; in dev-modus is geen wachtwoord nodig. Daarna volgt 
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | fase 10 | Billing |
 
 ---
+
+## Wat er in fase 10 gebouwd is (billing, limieten, team en admin)
+
+- **Prijspagina** (`/pricing`, publiek): Free, Starter, Pro en Agency/Business, maandelijks of jaarlijks (2 maanden gratis), met alle limieten per plan.
+- **Stripe**:
+  - Checkout met 7 dagen trial, btw via Stripe Tax, btw-nummer en kortingscodes.
+  - Klantportaal voor betaalmethode, facturen, opzeggen en plan wisselen.
+  - Ondertekende, idempotente webhooks (`/api/webhooks/stripe`).
+  - Facturen in de app (`/settings/billing`), met gebruik per limiet.
+- **Zonder `STRIPE_SECRET_KEY`**: een demo-checkout met hetzelfde effect in de app (plan, status, factuurregel), duidelijk gelabeld als "Demo-abonnement".
+- **Trial**: nieuwe workspaces starten op Pro (7 dagen) en vallen daarna automatisch terug naar Free. De data blijft, alleen de limieten en het historievenster gaan omlaag.
+- **Afgedwongen limieten** (één definitie in `packages/core`, tellers atomair in de database):
+  - zoekopdrachten per dag in de explorer, met een upsell-melding;
+  - gevolgde winkels, alertregels, exports, AI-vragen en seats;
+  - het historievenster op product- en winkeldetail.
+- **Team** (`/settings`):
+  - Leden uitnodigen als lid of beheerder, binnen het aantal seats van het plan. Een uitnodiging is 7 dagen geldig en werkt alleen voor het juiste e-mailadres.
+  - Leden verwijderen en uitnodigingen intrekken.
+  - Wisselen tussen workspaces als je in meerdere teams zit.
+- **Admin-paneel** (`/admin`, alleen voor platformbeheerders; voor anderen een 404):
+  - *Overzicht*: databronnen, wachtrij, clustering en backtests.
+  - *Gebruikers & plannen*: zoeken, plan handmatig wijzigen en platformbeheer toekennen.
+  - *Scoregewichten*: een nieuwe versie maken (als concept of direct actief), eerdere versies terugzetten, met de backtest-precisie per versie.
+  - *Feature flags*: uitrol per percentage en/of plan.
+  - *Curatie*: winnende producten uitlichten, die een badge krijgen en filterbaar zijn in de explorer.
+  - Elke beheeractie staat in de audit log.
+- **Tests**: unit-tests voor de feature-flag-uitrol, en e2e voor prijzen en demo-checkout, alle admin-tabbladen, de 404 voor niet-beheerders, de zoeklimiet op Free en de volledige uitnodigingsflow (inclusief een vreemde die de link probeert). Daarnaast een integratietest van de Stripe-webhook: handtekening, plan omhoog en omlaag, en een dubbel event dat maar één keer telt.
+
+Zie [ADR 0010](docs/adr/0010-fase-10-billing-admin.md).
 
 ## Wat er in fase 9 gebouwd is (AI-assistent, rapporten, transcriptie en OCR)
 
@@ -297,7 +326,7 @@ Zie [ADR 0002](docs/adr/0002-fase-2-store-intelligence.md) en [`docs/sources/`](
 - **Verkeer en omzet van ontdekte winkels** tonen we als "—". Daarvoor is een datapartner nodig (clickstream).
 - **Ad-dekking volgt de bronnen:** Meta alleen ads met EU-levering, Google alleen EER/Turkije, en TikTok-toegang mogelijk alleen voor onderzoek (juridisch toetsen).
 - **Creatives van Meta** komen alleen uit snapshots. Dat staat in productie uit (`META_SNAPSHOT_CAPTURE=false`) tot er juridisch akkoord is.
-- **Video-transcriptie, OCR en hook-analyse** komen in fase 9.
+- **Seats met Clerk-organisaties** worden nog niet tegen het plan afgedwongen (in dev-auth wel). Echte Stripe-betalingen zijn zonder account niet end-to-end getest. De webhookverwerking is wel getest, met ondertekende events tegen de echte database (alleen het ophalen van het abonnement bij Stripe is gestubd).
 - **Lokale S3:** Docker Hub publiceert geen MinIO-images meer, dus compose gebruikt `quay.io/minio/minio`.
 - **Tekstembeddings** zijn hashing-gebaseerd (geen extern model): goed voor varianten van dezelfde titel, maar zonder synoniemen ("hair clip" ≠ "claw clip"). Het beeldsignaal vangt een deel op. Een echt embeddingmodel is de eerste upgrade.
 - **Amazon Creators API**: de responsstructuur is nog niet tegen een echt account geverifieerd; de parser is tolerant en de eerste echte respons moet een fixture worden.
@@ -309,9 +338,12 @@ Zie [ADR 0002](docs/adr/0002-fase-2-store-intelligence.md) en [`docs/sources/`](
 - Er zijn nog geen deploy-workflows (Vercel/Hetzner) en geen Terraform.
 - Afwijkingen van het oorspronkelijke plan staan in [`docs/adr/0001-fase-1-keuzes.md`](docs/adr/0001-fase-1-keuzes.md).
 
-## Volgende stap: fase 10 (billing, abonnementen, limieten en admin)
+## Volgende stap: fase 11 (Chrome-extensie, push-to-store, publieke API en leads-export)
 
-- Stripe (checkout, klantportaal, webhooks, trial, btw), afgedwongen limieten in de hele app, een prijspagina, en adminbeheer van gebruikers, feature-flags, scoregewichten en curatie.
+- Een Chrome-extensie (MV3) die op elke webshop laat zien wat Trendscope weet.
+- Een product met één klik als concept naar je eigen Shopify-winkel.
+- Een publieke REST API v1 met API-sleutels, rate limiting en OpenAPI-documentatie.
+- Een B2B-leads-export van winkels, met alleen zakelijke gegevens.
 
 ## Structuur
 

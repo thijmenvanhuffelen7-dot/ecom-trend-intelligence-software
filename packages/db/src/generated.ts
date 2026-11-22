@@ -405,6 +405,22 @@ export interface Forecasts {
   trend_30d: number | null;
 }
 
+export interface Invoices {
+  amount_due: number;
+  amount_paid: Generated<number>;
+  created_at: Generated<Timestamp>;
+  currency: Generated<string>;
+  hosted_invoice_url: string | null;
+  id: string;
+  invoice_pdf: string | null;
+  number: string | null;
+  period_end: Timestamp | null;
+  period_start: Timestamp | null;
+  status: string;
+  tax: number | null;
+  workspace_id: string;
+}
+
 export interface Keywords {
   first_seen: Generated<Timestamp>;
   growth_30d: number | null;
@@ -671,15 +687,26 @@ export interface StoreTechnologies {
   type: string;
 }
 
+export interface StripeEvents {
+  error: string | null;
+  id: string;
+  processed_at: Timestamp | null;
+  received_at: Generated<Timestamp>;
+  type: string;
+}
+
 export interface Subscriptions {
+  cancel_at_period_end: Generated<boolean>;
   created_at: Generated<Timestamp>;
   current_period_end: Timestamp | null;
   id: Generated<string>;
   interval: string;
   plan: PlanId;
+  price_id: string | null;
   status: string;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
+  trial_end: Timestamp | null;
   updated_at: Generated<Timestamp>;
   workspace_id: string;
 }
@@ -777,8 +804,22 @@ export interface Watchlists {
   workspace_id: string;
 }
 
+export interface WorkspaceInvitations {
+  accepted_at: Timestamp | null;
+  created_at: Generated<Timestamp>;
+  email: string;
+  expires_at: Generated<Timestamp>;
+  id: Generated<string>;
+  invited_by: string | null;
+  revoked_at: Timestamp | null;
+  role: Generated<WorkspaceRole>;
+  token_hash: string;
+  workspace_id: string;
+}
+
 export interface Workspaces {
   auth_provider_id: string | null;
+  billing_status: Generated<string>;
   countries: Generated<string[]>;
   created_at: Generated<Timestamp>;
   id: Generated<string>;
@@ -786,7 +827,9 @@ export interface Workspaces {
   niches: Generated<string[]>;
   plan: Generated<PlanId>;
   slug: string;
+  stripe_customer_id: string | null;
   trial_ends_at: Timestamp | null;
+  trial_used: Generated<boolean>;
   updated_at: Generated<Timestamp>;
 }
 
@@ -817,6 +860,7 @@ export interface DB {
   entity_links: EntityLinks;
   feature_flags: FeatureFlags;
   forecasts: Forecasts;
+  invoices: Invoices;
   keywords: Keywords;
   livestream_products: LivestreamProducts;
   livestreams: Livestreams;
@@ -834,6 +878,7 @@ export interface DB {
   store_candidates: StoreCandidates;
   store_technologies: StoreTechnologies;
   stores: Stores;
+  stripe_events: StripeEvents;
   subscriptions: Subscriptions;
   supplier_offers: SupplierOffers;
   suppliers: Suppliers;
@@ -842,5 +887,6 @@ export interface DB {
   users: Users;
   videos: Videos;
   watchlists: Watchlists;
+  workspace_invitations: WorkspaceInvitations;
   workspaces: Workspaces;
 }
