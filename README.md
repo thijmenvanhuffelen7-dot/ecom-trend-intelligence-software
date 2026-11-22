@@ -2,7 +2,7 @@
 
 Trendscope is een all-in-one platform voor e-commerce trend- en concurrentie-intelligentie. Het koppelt producten, winkels, advertenties, creators, zoektrends en leveranciers aan elkaar. Elk product krijgt een **groeisnelheid**, een **validatiescore**, een **saturatiescore** en een **opportuniteitsscore**, en het platform laat altijd zien *waarom* een product zo scoort.
 
-> **Status: fase 8 is klaar (alerts en integraties).** Daaronder: e-mailmarketing en funnels (fase 7), TikTok Shop en creators (fase 6), trenddetectie en live scoring (fase 5), productclustering en marktplaatsen (fase 4), ad intelligence (fase 3) en store intelligence (fase 2). Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de echte API's aanroept.
+> **Status: fase 9 is klaar (AI-assistent).** Daaronder: alerts en integraties (fase 8), e-mailmarketing en funnels (fase 7), TikTok Shop en creators (fase 6), trenddetectie en live scoring (fase 5), productclustering en marktplaatsen (fase 4), ad intelligence (fase 3) en store intelligence (fase 2). Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de echte API's aanroept.
 > Architectuurplan: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Onderzoek naar de UX van TrendTrack: [`docs/research/trendtrack-ux.md`](docs/research/trendtrack-ux.md).
 
 | Shop Explorer | Winkeldetail |
@@ -55,11 +55,26 @@ Log in met elk e-mailadres; in dev-modus is geen wachtwoord nodig. Daarna volgt 
 | `APP_ENCRYPTION_KEY` | productie | Versleutelt kanaalsecrets (webhook-URL's, bot-tokens); `openssl rand -base64 32` |
 | `CRON_SECRET` | productie | Beveiligt `/api/cron/alerts` (Vercel Cron) |
 | `RESEND_API_KEY`, `EMAIL_FROM` | live e-mail | Digests en e-mailalerts (zonder sleutel: alleen gelogd) |
+| `ANTHROPIC_API_KEY` | AI | Assistent, rapporten, ad-copy en creative-analyse met Claude (zonder sleutel: offline-modus) |
+| `WHISPER_MODEL` | optioneel | Lokaal faster-whisper-model voor transcriptie van video-ads |
 | `CHROME_PATH` | optioneel | Chromium voor Playwright-screenshots |
 | `ANTHROPIC_API_KEY` | fase 9 | AI-assistent en rapporten |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | fase 10 | Billing |
 
 ---
+
+## Wat er in fase 9 gebouwd is (AI-assistent, rapporten, transcriptie en OCR)
+
+- **Assistent** (`/assistant`): chat met de data. Claude Opus 5.5 gebruikt de tool runner met zeven alleen-lezende tools: producten, productdetail, trends, winkels, ads, TikTok Shop en niches.
+  - Het antwoord streamt naar de browser, met links naar de bron.
+  - Gesprekken worden per workspace bewaard, en elke vraag telt mee voor de planlimiet.
+- **AI-rapport per product**: doelgroep, USP's, ad-hoeken met hooks, prijsadvies (op basis van prijsrange, inkoop en marge), risico's met ernst, en een oordeel met betrouwbaarheid. Gestructureerde output, gecachet per product en vernieuwd zodra de data verandert.
+- **Ad-copy-generator**: hooks, primaire teksten, koppen, een productbeschrijving en winkelnaam-ideeën, met kopieerknoppen.
+- **Creative-analyse** in de worker (elke 20 minuten; CLI `trendscope analyze-creatives`): OCR, hook en hook-type, invalshoek, CTA en claims per ad, met Claude vision op beelden uit onze eigen opslag. Transcriptie gebeurt optioneel lokaal met Whisper.
+- **Zonder `ANTHROPIC_API_KEY`**: een offline-modus met dezelfde tools en schema's, regelgebaseerd en duidelijk gelabeld. Als er geen exacte treffer is, versoepelt hij de filters en zegt dat erbij.
+- **Tests**: de offline hook-classificatie, de veiligheid van de Markdown-weergave en de CLI (unit); assistent, rapport, ad-copy en creative-analyse (e2e). De e2e-tests vonden twee bugs in de intentieherkenning en de Markdown-weergave, en die zijn opgelost.
+
+Zie [ADR 0009](docs/adr/0009-fase-9-ai.md).
 
 ## Wat er in fase 8 gebouwd is (watchlists, alerts, digests en integraties)
 
@@ -294,10 +309,9 @@ Zie [ADR 0002](docs/adr/0002-fase-2-store-intelligence.md) en [`docs/sources/`](
 - Er zijn nog geen deploy-workflows (Vercel/Hetzner) en geen Terraform.
 - Afwijkingen van het oorspronkelijke plan staan in [`docs/adr/0001-fase-1-keuzes.md`](docs/adr/0001-fase-1-keuzes.md).
 
-## Volgende stap: fase 9 (AI-assistent, rapporten, transcriptie en OCR)
+## Volgende stap: fase 10 (billing, abonnementen, limieten en admin)
 
-- Chat met de data in natuurlijke taal (Claude met tools over de eigen database), AI-rapporten per product en niche, en generatoren voor ad-copy en productbeschrijvingen.
-- Video-transcriptie en OCR op ad-creatives, met hook-analyse.
+- Stripe (checkout, klantportaal, webhooks, trial, btw), afgedwongen limieten in de hele app, een prijspagina, en adminbeheer van gebruikers, feature-flags, scoregewichten en curatie.
 
 ## Structuur
 

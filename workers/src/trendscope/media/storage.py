@@ -93,3 +93,13 @@ def put_asset(data: bytes, content_type: str, *, prefix: str = "creatives", clie
     )
     w, h = image_size(data, content_type)
     return StoredAsset(digest, key, content_type, len(data), w, h)
+
+
+def get_asset(key: str, client: Any | None = None) -> tuple[bytes, str]:
+    """(bytes, content-type) van een eigen asset; alleen content-addressed sleutels die wij zelf schrijven."""
+    import re as _re
+
+    if not _re.fullmatch(r"(creatives|screenshots|products)/[0-9a-f]{2}/[0-9a-f]{64}\.(jpg|png|webp|gif|mp4)", key):
+        raise ValueError("Onbekende sleutel")
+    obj = (client or s3_client()).get_object(Bucket=get_settings().s3_bucket, Key=key)
+    return obj["Body"].read(), str(obj.get("ContentType") or "application/octet-stream")

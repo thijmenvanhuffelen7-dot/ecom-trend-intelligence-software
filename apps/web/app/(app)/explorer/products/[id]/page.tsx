@@ -17,6 +17,8 @@ import { NICHE_EMOJI } from "@/lib/niches";
 import { cn, daysBetween, formatCompact, formatMoney } from "@/lib/utils";
 import { getProduct } from "@/server/queries/products";
 import { clusterTikTok } from "@/server/queries/social";
+import { ProductAi } from "@/components/assistant/product-ai";
+import { getReport, type AdCopy, type ProductReport } from "@/server/ai/reports";
 
 export const metadata = { title: "Product" };
 
@@ -114,7 +116,12 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   const t = await getT();
   const data = await getProduct(Number(id), session.workspace.id);
   if (!data) notFound();
-  const tiktok = await clusterTikTok(data.cluster.id);
+  const aiLocale = t.locale === "en" ? "en" : "nl";
+  const [tiktok, aiReport, aiCopy] = await Promise.all([
+    clusterTikTok(data.cluster.id),
+    getReport(Number(id), "product_report", aiLocale),
+    getReport(Number(id), "ad_copy", aiLocale),
+  ]);
   const { cluster: c } = data;
   const L = t.locale;
   const b = c.breakdown;
@@ -293,6 +300,12 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
             </dl>
           </Card>
         )}
+
+        <ProductAi
+          clusterId={Number(id)}
+          report={aiReport ? { ...aiReport, content: aiReport.content as unknown as ProductReport } : null}
+          copy={aiCopy ? { ...aiCopy, content: aiCopy.content as unknown as AdCopy } : null}
+        />
 
         {/* Leveranciers + marge */}
         <Card>

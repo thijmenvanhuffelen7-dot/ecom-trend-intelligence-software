@@ -86,7 +86,10 @@ class Settings(BaseSettings):
     # Fase 8: transactionele e-mail en links in meldingen
     resend_api_key: str = ""
     email_from: str = "Trendscope <alerts@trendscope.example>"
-    app_url: str = "http://localhost:3000"  # zoveel winkels per ronde inschrijven (gevolgde winkels eerst)
+    app_url: str = "http://localhost:3000"
+    # Fase 9: AI
+    anthropic_api_key: str = ""  # leeg = offline-analyse (regelgebaseerd)
+    whisper_model: str = ""  # bv. "small" — lokaal faster-whisper-model voor transcriptie (optioneel)  # zoveel winkels per ronde inschrijven (gevolgde winkels eerst)
 
     # Media-opslag (S3-compatibel; lokaal MinIO)
     s3_endpoint: str = "http://localhost:9002"  # 9000 is ClickHouse native

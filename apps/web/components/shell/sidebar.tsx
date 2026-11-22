@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Clapperboard, Compass, Home, LayoutGrid, LineChart, LogOut, Moon, Radar, Search, Settings, Shield, Sun, Languages } from "lucide-react";
+import { Bell, Clapperboard, Compass, Sparkles, Home, LayoutGrid, LineChart, LogOut, Moon, Radar, Search, Settings, Shield, Sun, Languages } from "lucide-react";
 import { CommandPalette } from "./command-palette";
 import { useTransition } from "react";
 import { LogoMark } from "./logo";
@@ -15,7 +15,7 @@ import { logout } from "@/server/actions/auth";
 
 interface NavItem {
   href: string;
-  key: "home" | "explorer" | "brandtracker" | "trends" | "social" | "boards";
+  key: "home" | "explorer" | "brandtracker" | "trends" | "social" | "assistant" | "boards";
   icon: React.ComponentType<{ className?: string }>;
   match: string;
   soon?: boolean;
@@ -27,6 +27,7 @@ const ITEMS: NavItem[] = [
   { href: "/brandtracker", key: "brandtracker", icon: Radar, match: "/brandtracker" },
   { href: "/trends", key: "trends", icon: LineChart, match: "/trends" },
   { href: "/social", key: "social", icon: Clapperboard, match: "/social" },
+  { href: "/assistant", key: "assistant", icon: Sparkles, match: "/assistant" },
   { href: "/boards", key: "boards", icon: LayoutGrid, match: "/boards" },
 ];
 

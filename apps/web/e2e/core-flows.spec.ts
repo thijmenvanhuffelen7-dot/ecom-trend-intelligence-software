@@ -63,7 +63,7 @@ test("product detail explains the score", async ({ page }) => {
   await page.goto("/explorer/products");
   await page.locator("tbody tr").first().getByRole("link").first().click();
   await expect(page.getByText("Waarom deze score?")).toBeVisible();
-  await expect(page.getByText(/positieve signalen/)).toBeVisible();
+  await expect(page.getByText(/\d+ positieve signalen$/).first()).toBeVisible();
   await expect(page.getByText("Margecalculator")).toBeVisible();
 });
 

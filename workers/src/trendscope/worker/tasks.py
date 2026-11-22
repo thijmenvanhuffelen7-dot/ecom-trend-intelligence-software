@@ -153,3 +153,13 @@ def digests() -> dict[str, int]:
     settings = get_settings()
     with psycopg.connect(settings.database_url) as conn:
         return send_digests(conn, settings, datetime.now(UTC))
+
+
+@app.task(name="trendscope.analyze_creatives")
+def analyze_creatives() -> dict[str, int]:
+    """Nieuwe ads analyseren: OCR, hook, invalshoek, CTA en claims (Claude, of offline zonder sleutel)."""
+    from trendscope.ai.creatives import analyze_ads
+
+    settings = get_settings()
+    with psycopg.connect(settings.database_url) as conn:
+        return analyze_ads(conn, settings, datetime.now(UTC))

@@ -130,4 +130,7 @@ def simulate(settings: Settings, days: int, *, progress: bool = True, workers: i
                 }
             )
             totals["backtests"] = len(run_backtests(conn, ch_main, today.date()))
+            from trendscope.ai.creatives import analyze_ads
+
+            totals.update({f"creatives_{k}": v for k, v in analyze_ads(conn, settings, today, limit=2000).items()})
     return dict(totals)

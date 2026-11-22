@@ -98,6 +98,28 @@ export default async function AdPage({ params }: { params: Promise<{ id: string 
               </CardBody>
             </Card>
           )}
+          {ad.ai_summary && (
+            <Card data-testid="creative-analysis">
+              <CardHeader title={t("adDetail.analysis")} hint={t("adDetail.analysisHint")} />
+              <CardBody className="space-y-3 text-sm">
+                {(() => {
+                  const a = ad.ai_summary as { hook: string; hook_type: string; angle: string; cta: string | null; claims: string[]; ocr_text: string; model: string };
+                  return (
+                    <>
+                      <p className="rounded-xl bg-accent-soft/50 p-3"><span className="text-xs font-semibold tracking-wide text-accent-strong uppercase">Hook · {a.hook_type.replace("_", " ")}</span><br />“{a.hook}”</p>
+                      <dl className="grid grid-cols-[110px_1fr] gap-y-1.5">
+                        <dt className="text-fg-muted">{t("adDetail.angle")}</dt><dd>{a.angle}</dd>
+                        {a.cta && (<><dt className="text-fg-muted">CTA</dt><dd>{a.cta}</dd></>)}
+                        {a.claims.length > 0 && (<><dt className="text-fg-muted">{t("adDetail.claims")}</dt><dd>{a.claims.join(" · ")}</dd></>)}
+                        {a.ocr_text && (<><dt className="text-fg-muted">OCR</dt><dd className="text-fg-muted">{a.ocr_text}</dd></>)}
+                      </dl>
+                      <p className="text-xs text-fg-subtle">{a.model === "offline" ? t("assistant.offlineMade") : a.model}</p>
+                    </>
+                  );
+                })()}
+              </CardBody>
+            </Card>
+          )}
         </div>
 
         <div className="grid content-start gap-5">
