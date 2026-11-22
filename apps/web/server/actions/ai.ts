@@ -28,3 +28,15 @@ export async function generateProductAi(clusterId: number, kind: ReportKind, for
   revalidatePath(`/explorer/products/${id}`);
   return { ok: true };
 }
+
+/** Gesprek verwijderen (privacy: gesprekken blijven alleen bewaard tot je ze verwijdert). Eigen gesprekken, of als beheerder. */
+export async function deleteConversation(id: string): Promise<{ ok: boolean }> {
+  const session = await requireSession();
+  if (!z.string().uuid().safeParse(id).success) return { ok: false };
+  const { getDb } = await import("@trendscope/db");
+  let q = getDb().deleteFrom("ai_conversations").where("id", "=", id).where("workspace_id", "=", session.workspace.id);
+  if (session.role === "member") q = q.where("user_id", "=", session.user.id);
+  const res = await q.executeTakeFirst();
+  revalidatePath("/assistant");
+  return { ok: Number(res.numDeletedRows) > 0 };
+}

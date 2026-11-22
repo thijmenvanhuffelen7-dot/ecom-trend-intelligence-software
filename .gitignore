@@ -17,3 +17,10 @@ db/postgres/schema.sql
 workers/.mockweb/
 dump.rdb
 celerybeat-schedule*
+
+# Deploy
+.env.production
+infra/terraform/.terraform/
+infra/terraform/*.tfstate*
+infra/terraform/prod.tfvars
+infra/terraform/.terraform.lock.hcl

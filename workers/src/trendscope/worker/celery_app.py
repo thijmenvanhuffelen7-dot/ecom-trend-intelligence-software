@@ -40,5 +40,6 @@ app.conf.update(
         "digests": {"task": "trendscope.digests", "schedule": crontab(minute=25)},
         "creative-analysis": {"task": "trendscope.analyze_creatives", "schedule": crontab(minute="*/20")},
         "weekly-backtest": {"task": "trendscope.backtest", "schedule": crontab(day_of_week=1, hour=5, minute=20)},
+        "retention": {"task": "trendscope.retention", "schedule": crontab(hour=3, minute=35)},
     },
 )

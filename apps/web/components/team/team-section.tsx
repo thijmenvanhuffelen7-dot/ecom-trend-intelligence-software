@@ -7,6 +7,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import type { Session } from "@/lib/auth/server";
 import type { Translator } from "@/lib/i18n/translate";
 import { formatDate } from "@/lib/utils";
+import { DeleteWorkspace } from "./delete-workspace";
 import { InviteForm, RemoveMember, RevokeInvite, SwitchWorkspace } from "./team-controls";
 
 export async function TeamSection({ session, t }: { session: Session; t: Translator }) {
@@ -81,6 +82,12 @@ export async function TeamSection({ session, t }: { session: Session; t: Transla
           )}
         </CardBody>
       </Card>
+      {session.role === "owner" && (
+        <Card className="max-w-2xl border-danger/30">
+          <CardHeader title={t("workspace.dangerTitle")} />
+          <CardBody><DeleteWorkspace name={session.workspace.name} /></CardBody>
+        </Card>
+      )}
       {workspaces.length > 1 && (
         <Card className="max-w-2xl">
           <CardHeader title={t("team.workspaces")} />

@@ -9,7 +9,10 @@ import { SESSION_COOKIE, verifySession } from "./token";
 export type AuthMode = "dev" | "clerk";
 
 export function authMode(): AuthMode {
-  return process.env.AUTH_MODE === "clerk" ? "clerk" : "dev";
+  if (process.env.AUTH_MODE === "clerk") return "clerk";
+  // De dev-login (inloggen met alleen een e-mailadres) mag nooit in productie draaien: dan kan iedereen elk account openen
+  if (process.env.APP_ENV === "production") throw new Error("APP_ENV=production vereist AUTH_MODE=clerk (de dev-login is uitgeschakeld)");
+  return "dev";
 }
 
 export function authSecret(): string {
@@ -92,16 +95,16 @@ export async function provision(identity: Identity, preferredWorkspaceId?: strin
         role = existing.role;
       } else {
         const base = identity.name ?? identity.email.split("@")[0]!;
+        // Nieuwe gebruikers starten met een Pro-trial van 7 dagen; wie al eerder een workspace had (en die verwijderde), niet opnieuw
+        const hadWorkspace = await trx.selectFrom("audit_logs").select("id").where("actor_id", "=", user.id).where("action", "=", "workspace.delete").executeTakeFirst();
         const ws = await trx
           .insertInto("workspaces")
           .values({
             name: `${base}'s workspace`,
-            slug: `${slugify(base)}-${user.id.slice(-6)}`,
-            // Nieuwe workspaces starten met een Pro-trial van 7 dagen
-            plan: "pro",
-            trial_ends_at: new Date(Date.now() + 7 * 86_400_000),
-            billing_status: "trialing",
-            trial_used: true,
+            slug: `${slugify(base)}-${user.id.slice(-6)}${hadWorkspace ? `-${Date.now().toString(36).slice(-4)}` : ""}`,
+            ...(hadWorkspace
+              ? { plan: "free" as const, billing_status: "none", trial_used: true }
+              : { plan: "pro" as const, trial_ends_at: new Date(Date.now() + 7 * 86_400_000), billing_status: "trialing", trial_used: true }),
           })
           .returning("id")
           .executeTakeFirstOrThrow();
@@ -150,6 +153,8 @@ async function clerkIdentity(): Promise<Identity | null> {
 }
 
 export const getSession = cache(async (): Promise<Session | null> => {
+  // Verkeerd geconfigureerde productie (geen Clerk): niemand is ingelogd; publieke pagina's blijven werken, de rest geeft 503
+  if (process.env.AUTH_MODE !== "clerk" && process.env.APP_ENV === "production") return null;
   if (authMode() === "clerk") {
     const identity = await clerkIdentity();
     // Clerk-organisatie bepaalt de workspace; zonder organisatie geldt dezelfde voorkeurscookie als in dev

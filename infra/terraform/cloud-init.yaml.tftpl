@@ -1,0 +1,17 @@
+#cloud-config
+# Basisinstallatie: Docker, automatische beveiligingsupdates, geen wachtwoord-SSH. De app zelf komt via de deploy-workflow.
+package_update: true
+package_upgrade: true
+packages: [ca-certificates, curl, unattended-upgrades, fail2ban]
+ssh_pwauth: false
+disable_root: false
+write_files:
+  - path: /etc/trendscope/role
+    content: "${primary ? "primary" : "worker"}\n"
+  - path: /etc/trendscope/worker-image
+    content: "${worker_image}\n"
+runcmd:
+  - curl -fsSL https://get.docker.com | sh
+  - systemctl enable --now docker
+  - mkdir -p /opt/trendscope
+  - dpkg-reconfigure -f noninteractive unattended-upgrades

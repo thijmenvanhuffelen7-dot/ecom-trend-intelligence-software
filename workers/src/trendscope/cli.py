@@ -29,6 +29,7 @@ def main() -> None:
     sub.add_parser("score", help="Signalen per cluster afleiden, alle clusters scoren en forecasts maken (vandaag)")
     sub.add_parser("backtest", help="Speel de scoring af op 14/21/30 dagen geleden en meet de voorspelkracht")
     sub.add_parser("analyze-creatives", help="Analyseer nieuwe ads: OCR, hook, invalshoek, CTA, claims")
+    sub.add_parser("retention", help="Pas de bewaartermijnen toe (audit logs, verlopen uitnodigingen, oude tellers …)")
     shots = sub.add_parser("screenshots", help="Maak screenshots van ontdekte winkels (Playwright → S3)")
     shots.add_argument("--limit", type=int, default=20)
     args = parser.parse_args()
@@ -92,6 +93,10 @@ def main() -> None:
         from trendscope.worker.tasks import analyze_creatives
 
         print(json.dumps(analyze_creatives(), indent=2))
+    elif args.cmd == "retention":
+        from trendscope.worker.tasks import retention
+
+        print(json.dumps(retention(), indent=2))
     elif args.cmd == "score":
         from trendscope.worker.tasks import score_daily
 

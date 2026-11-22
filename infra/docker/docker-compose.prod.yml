@@ -1,0 +1,80 @@
+# Productie op één Hetzner-server (of meer, zie infra/terraform): workers, scheduler en de datastores.
+# De web-app draait op Vercel; Postgres kan ook managed zijn (zet dan DATABASE_URL en laat de postgres-service weg).
+#
+#   cp .env.production.example .env.production   # invullen
+#   docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production up -d
+#
+# Datastores luisteren alleen op het private netwerk (geen publieke poorten); Vercel praat met Postgres via TLS
+# (managed) of via een Postgres-poort die de firewall alleen voor Vercel-uitgangen openzet.
+name: trendscope-prod
+
+x-worker: &worker
+  image: ${WORKER_IMAGE:-ghcr.io/OWNER/trendscope-workers:latest}
+  env_file: ../../.env.production
+  restart: unless-stopped
+  depends_on:
+    redis: { condition: service_started }
+    clickhouse: { condition: service_healthy }
+  logging: { driver: json-file, options: { max-size: "20m", max-file: "5" } }
+
+services:
+  migrate:
+    <<: *worker
+    restart: "no"
+    command: ["sh", "-c", "trendscope migrate-clickhouse"]
+
+  worker:
+    <<: *worker
+    command: ["celery", "-A", "trendscope.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=${WORKER_CONCURRENCY:-4}", "--max-tasks-per-child=200"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_started }
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
+
+  beat:
+    <<: *worker
+    # Precies één scheduler; de schedulefile op een volume zodat herstarts geen taken dubbel inplannen
+    command: ["celery", "-A", "trendscope.worker.celery_app", "beat", "--loglevel=INFO", "--schedule=/data/celerybeat-schedule"]
+    volumes: [beat-data:/data]
+    healthcheck: { disable: true }
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?zet REDIS_PASSWORD}"]
+    volumes: [redis-data:/data]
+    restart: unless-stopped
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-trendscope}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?zet CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DB: trendscope
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes: [ch-data:/var/lib/clickhouse]
+    ulimits: { nofile: { soft: 262144, hard: 262144 } }
+    healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"], interval: 5s, retries: 30 }
+    restart: unless-stopped
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    environment:
+      MEILI_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:?zet MEILISEARCH_MASTER_KEY}
+      MEILI_ENV: production
+      MEILI_NO_ANALYTICS: "true"
+    volumes: [meili-data:/meili_data]
+    restart: unless-stopped
+
+  postgres:
+    profiles: ["selfhosted-db"]   # alleen met --profile selfhosted-db; standaard managed Postgres
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: trendscope
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?zet POSTGRES_PASSWORD}
+      POSTGRES_DB: trendscope
+    volumes: [pg-data:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U trendscope"], interval: 5s, retries: 30 }
+    restart: unless-stopped
+
+volumes: { redis-data: {}, ch-data: {}, meili-data: {}, pg-data: {}, beat-data: {} }

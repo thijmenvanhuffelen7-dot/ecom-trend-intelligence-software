@@ -3,13 +3,17 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/token";
 
 // Openbaar: auth-pagina's, prijzen, webhooks (eigen handtekening) en cron (eigen CRON_SECRET)
-const PUBLIC_PATHS = ["/login", "/sign-in", "/sign-up", "/pricing", "/api/webhooks", "/api/cron", "/media/demo", "/api/health", "/api/v1", "/developers"];
+const PUBLIC_PATHS = ["/login", "/sign-in", "/sign-up", "/pricing", "/api/webhooks", "/api/cron", "/media/demo", "/api/health", "/api/v1", "/developers", "/privacy", "/terms"];
 
 function isPublic(pathname: string): boolean {
-  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  return pathname === "/" || PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 async function devMiddleware(req: NextRequest) {
+  // Fail closed: zonder Clerk geen logins in productie (de dev-login accepteert elk e-mailadres)
+  if (process.env.APP_ENV === "production" && (req.nextUrl.pathname === "/login" || !isPublic(req.nextUrl.pathname))) {
+    return new NextResponse("Authentication is not configured (set AUTH_MODE=clerk).", { status: 503 });
+  }
   if (isPublic(req.nextUrl.pathname)) return NextResponse.next();
   const secret = process.env.AUTH_SECRET ?? "";
   const session = secret.length >= 32 ? await verifySession(req.cookies.get(SESSION_COOKIE)?.value, secret) : null;

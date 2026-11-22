@@ -1,0 +1,77 @@
+name: Deploy
+
+# Alleen handmatig of op een release-tag. De environment "production" hoort reviewers te hebben (Settings → Environments),
+# zodat elke productie-deploy een expliciete goedkeuring krijgt.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+concurrency: { group: deploy-production, cancel-in-progress: false }
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    name: Worker-image → GHCR
+    runs-on: ubuntu-latest
+    outputs: { image: "${{ steps.meta.outputs.image }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}-workers:${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with: { context: ., file: workers/Dockerfile, push: true, tags: "${{ steps.meta.outputs.image }}", cache-from: type=gha, cache-to: "type=gha,mode=max" }
+
+  migrate:
+    name: Postgres-migraties
+    needs: image
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # Migraties zijn additief geschreven (oude code blijft werken), dus eerst migreren, dan uitrollen
+      - run: pnpm db:migrate
+        env: { DATABASE_URL: "${{ secrets.DATABASE_URL }}" }
+
+  workers:
+    name: Workers uitrollen (Hetzner)
+    needs: [image, migrate]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose-bestand en image naar de server, dan herstarten
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.WORKER_HOST }}
+          IMAGE: ${{ needs.image.outputs.image }}
+        run: |
+          install -m 600 /dev/null ~/.ssh_key && printf '%s\n' "$SSH_KEY" > ~/.ssh_key
+          mkdir -p ~/.ssh && ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+          scp -i ~/.ssh_key infra/docker/docker-compose.prod.yml "deploy@$HOST:/opt/trendscope/infra/docker/docker-compose.prod.yml"
+          ssh -i ~/.ssh_key "deploy@$HOST" "cd /opt/trendscope && WORKER_IMAGE=$IMAGE docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production pull && WORKER_IMAGE=$IMAGE docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production up -d --remove-orphans"
+
+  web:
+    name: Web-app (Vercel)
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx --yes vercel@39 pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - run: npx --yes vercel@39 build --prod --token="$VERCEL_TOKEN"
+      - run: npx --yes vercel@39 deploy --prebuilt --prod --token="$VERCEL_TOKEN"

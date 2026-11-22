@@ -52,6 +52,30 @@ jobs:
       - run: pnpm -r --if-present typecheck
       - run: pnpm -r --if-present test
 
+  infra:
+    name: Infra (worker-image · Terraform)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Worker-image bouwen (niet pushen)
+        uses: docker/build-push-action@v6
+        with: { context: ., file: workers/Dockerfile, push: false, load: true, tags: "trendscope-workers:ci", cache-from: type=gha, cache-to: "type=gha,mode=max" }
+      - name: Rooktest van het image
+        run: docker run --rm trendscope-workers:ci sh -c 'trendscope connectors >/dev/null && python -c "import trendscope.worker.celery_app as c; assert c.app.conf.beat_schedule"'
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.9.8 }
+      - name: Terraform fmt + validate
+        working-directory: infra/terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
+      - name: Compose-bestanden valideren
+        run: |
+          cp .env.production.example .env.production
+          REDIS_PASSWORD=x CLICKHOUSE_PASSWORD=x MEILISEARCH_MASTER_KEY=x POSTGRES_PASSWORD=x docker compose -f infra/docker/docker-compose.prod.yml --env-file .env.production config -q
+
   e2e:
     name: Migraties · seed · build · Playwright
     runs-on: ubuntu-latest

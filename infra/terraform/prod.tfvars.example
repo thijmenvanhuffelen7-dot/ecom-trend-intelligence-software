@@ -1,0 +1,8 @@
+# Kopieer naar prod.tfvars (niet committen). Het token zet je via:  export TF_VAR_hcloud_token=...
+location           = "fsn1"
+worker_server_type = "ccx23"
+worker_count       = 1
+ssh_public_key     = "ssh-ed25519 AAAA... beheer@trendscope"
+admin_cidrs        = ["203.0.113.10/32"]
+data_volume_gb     = 200
+worker_image       = "ghcr.io/OWNER/trendscope-workers:latest"

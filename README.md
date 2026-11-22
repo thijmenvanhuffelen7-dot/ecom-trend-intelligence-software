@@ -2,8 +2,10 @@
 
 Trendscope is een all-in-one platform voor e-commerce trend- en concurrentie-intelligentie. Het koppelt producten, winkels, advertenties, creators, zoektrends en leveranciers aan elkaar. Elk product krijgt een **groeisnelheid**, een **validatiescore**, een **saturatiescore** en een **opportuniteitsscore**, en het platform laat altijd zien *waarom* een product zo scoort.
 
-> **Status: fase 11 is klaar (publieke API, Chrome-extensie, push-to-store en leads).** Daaronder: billing en admin (fase 10), AI-assistent (fase 9), alerts en integraties (fase 8), e-mailmarketing en funnels (fase 7), TikTok Shop en creators (fase 6), trenddetectie en live scoring (fase 5), productclustering en marktplaatsen (fase 4), ad intelligence (fase 3) en store intelligence (fase 2). Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de echte API's aanroept.
+> **Status: alle 12 fasen zijn klaar, en het product is klaar voor een gecontroleerde lancering** (zie [de launch-checklist](docs/LAUNCH_CHECKLIST.md) en [deployen](docs/DEPLOY.md)). Fase 12: publieke site, privacy, onboarding en deploy. Daaronder: API, extensie en push-to-store (fase 11), billing en admin (fase 10), AI-assistent (fase 9), alerts en integraties (fase 8), e-mailmarketing en funnels (fase 7), TikTok Shop en creators (fase 6), trenddetectie en live scoring (fase 5), productclustering en marktplaatsen (fase 4), ad intelligence (fase 3) en store intelligence (fase 2). Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de echte API's aanroept.
 > Architectuurplan: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Onderzoek naar de UX van TrendTrack: [`docs/research/trendtrack-ux.md`](docs/research/trendtrack-ux.md).
+
+![Landingspagina](docs/screenshots/landing.png)
 
 | Shop Explorer | Winkeldetail |
 |---|---|
@@ -62,6 +64,29 @@ Log in met elk e-mailadres; in dev-modus is geen wachtwoord nodig. Daarna volgt 
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | fase 10 | Billing |
 
 ---
+
+## Wat er in fase 12 gebouwd is (lancering)
+
+- **Publieke site**:
+  - een landingspagina op `/` met echte screenshots, functies, uitleg van de scores, bronnen en FAQ;
+  - een gedeelde kop en voet;
+  - privacyverklaring en voorwaarden (`/privacy`, `/terms`), als concept gemarkeerd voor juridische toetsing.
+- **Privacy afgedwongen in code**:
+  - een dagelijkse bewaartaak (`trendscope retention`) voor audit logs, Stripe-events, mails, uitnodigingen, tellers en rate-limitvensters;
+  - AI-gesprekken zijn te verwijderen;
+  - een workspace is definitief te verwijderen (eigenaar, naam typen, geen lopend abonnement), zonder tweede trial daarna.
+- **Onboarding**: een checklist "Aan de slag" op Home (winkel volgen, product bewaren, alert, assistent, team), afgeleid uit de echte voortgang.
+- **Beveiliging**:
+  - CSP, HSTS, `frame-ancestors 'none'`, nosniff, Permissions-Policy en COOP op alle routes;
+  - in `APP_ENV=production` kan de dev-login nooit aan staan (fail closed, 503).
+- **Deploy**:
+  - een worker-Dockerfile (non-root, healthcheck, Playwright);
+  - productie-Compose voor Hetzner (worker, beat, migratie, Redis, ClickHouse en Meilisearch zonder publieke poorten);
+  - een Terraform-skelet (hcloud: servers, privénetwerk, firewall, volume, cloud-init);
+  - een deploy-workflow met goedkeuring (GHCR → migraties → workers → Vercel);
+  - CI valideert de image-build, Terraform en Compose.
+- **Documentatie**: [docs/DEPLOY.md](docs/DEPLOY.md), [docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md), [ADR 0012](docs/adr/0012-fase-12-lancering.md).
+- **Tests**: e2e voor de landingspagina en headers (zonder CSP-fouten in de console), de onboarding-checklist en het verwijderen van gesprekken en workspaces; unit-test voor de productieblokkade op de dev-login; integratietest voor de bewaartermijnen.
 
 ## Wat er in fase 11 gebouwd is (publieke API, Chrome-extensie, push-to-store en leads)
 
@@ -345,7 +370,19 @@ Zie [ADR 0002](docs/adr/0002-fase-2-store-intelligence.md) en [`docs/sources/`](
 | Lint | ruff |
 | CI | `.github/workflows/ci.yml` (incl. migraties op en neer, seed, controle op actuele gegenereerde types, build en e2e) |
 
-**Performance (lokaal, productie-build, demodata):** de meeste schermen laden in 50–215 ms per pagina, ook met filters.
+**Performance (lokaal, productie-build, demodata, opgewarmd, mediaan van 3):**
+
+| Pagina | Volledig geladen |
+|---|---|
+| Landingspagina | 65 ms |
+| Home | 213 ms |
+| Productexplorer | 116–247 ms |
+| Shop Explorer | 317 ms |
+| Trends | 335 ms |
+| Product- en winkeldetail | 157–161 ms |
+| Prijs- en API-pagina's | < 50 ms |
+
+De time-to-first-byte is overal minder dan 190 ms.
 
 ## Bekende beperkingen
 
@@ -362,15 +399,18 @@ Zie [ADR 0002](docs/adr/0002-fase-2-store-intelligence.md) en [`docs/sources/`](
 - **Backtests** op de demodata zeggen iets over de werking van de methode, niet over de echte markt. Met echte data kunnen de gewichten worden afgesteld op deze metrieken.
 - **Marktplaatsafbeeldingen** kopiëren we alleen in mock-modus naar S3 (`STORE_MARKETPLACE_IMAGES=false` in productie, tot er juridisch akkoord is); de pHash wordt wel altijd berekend.
 - **Clerk** is geïmplementeerd maar zonder echte keys niet getest.
-- Er zijn nog geen deploy-workflows (Vercel/Hetzner) en geen Terraform.
+- **Deploy** is ingericht maar nog niet tegen echte accounts uitgevoerd (Vercel, Hetzner, managed Postgres). De Terraform-validatie en de volledige image-build draaien in CI.
+- **De juridische teksten** zijn concepten en moeten getoetst worden. Zie de [launch-checklist](docs/LAUNCH_CHECKLIST.md).
+- **De productexplorer** stuurt ~390 kB HTML voor de eerste pagina (scores, uitleg en sparklines per rij). Prima voor nu; wordt de lijst groter, dan is uitleg-op-aanvraag de eerste optimalisatie.
 - Afwijkingen van het oorspronkelijke plan staan in [`docs/adr/0001-fase-1-keuzes.md`](docs/adr/0001-fase-1-keuzes.md).
 
-## Volgende stap: fase 12 (lancering)
+## Na de 12 fasen: naar productie
 
-- Een publieke landingspagina, een privacy- en voorwaardenpagina, en polish van de onboarding.
-- Performance-metingen.
-- Deploy-configuratie: Vercel voor de web-app, Hetzner voor de workers, en een Terraform-skelet.
-- Een launch-checklist.
+Werk de [launch-checklist](docs/LAUNCH_CHECKLIST.md) af. De belangrijkste stappen:
+- juridische toetsing van de teksten en van elke databron;
+- commerciële licenties (Reddit, DataForSEO, Amazon);
+- de accounts koppelen: Clerk, Stripe live, Vercel, Hetzner, managed Postgres;
+- daarna `DATA_MODE=live`, en na een paar weken echte data de scoregewichten bijstellen met de backtests.
 
 ## Structuur
 

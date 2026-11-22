@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DeleteConversation } from "@/components/assistant/delete-conversation";
 import { MessageSquarePlus, Sparkles } from "lucide-react";
 import { getDb } from "@trendscope/db";
 import { Chat } from "@/components/assistant/chat";
@@ -44,8 +45,9 @@ export default async function AssistantPage({ searchParams }: { searchParams: Pr
         </div>
         <ul className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-4" data-testid="conversation-list">
           {conversations.map((cv) => (
-            <li key={cv.id}>
-              <Link href={`/assistant?c=${cv.id}`} className={cn("block truncate rounded-lg px-3 py-2 text-sm hover:bg-surface-hover", cv.id === current?.id && "bg-surface-hover font-medium")}>{cv.title}</Link>
+            <li key={cv.id} className="group flex items-center gap-1">
+              <Link href={`/assistant?c=${cv.id}`} className={cn("block min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-sm hover:bg-surface-hover", cv.id === current?.id && "bg-surface-hover font-medium")}>{cv.title}</Link>
+              <DeleteConversation id={cv.id} active={cv.id === current?.id} />
             </li>
           ))}
         </ul>

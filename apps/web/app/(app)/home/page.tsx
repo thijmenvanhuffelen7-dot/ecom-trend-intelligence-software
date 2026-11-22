@@ -7,6 +7,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { EmptyState, Flag, ShopThumb, Thumb } from "@/components/ui/misc";
 import { Meter, PHASE_COLORS, PhaseBadge, ScoreRing } from "@/components/ui/score";
 import { Sparkline } from "@/components/ui/sparkline";
+import { GettingStarted } from "@/components/onboarding/getting-started";
 import { requireSession } from "@/lib/auth/server";
 import { getT } from "@/lib/i18n/server";
 import { NICHE_EMOJI } from "@/lib/niches";
@@ -65,6 +66,9 @@ export default async function HomePage() {
       </header>
 
       <div className="grid gap-5 bg-bg-subtle/60 p-6 xl:grid-cols-[1.7fr_1fr]">
+        <div className="xl:col-span-2 empty:hidden">
+          <GettingStarted session={session} t={t} />
+        </div>
         <Card>
           <CardHeader icon={<Zap className="!text-accent" />} title={t("home.topOpportunities")} action={<SeeAll href="/explorer/products" label={t("home.seeAll")} />} />
           <div className="grid gap-px border-t border-border bg-border sm:grid-cols-2 lg:grid-cols-3">

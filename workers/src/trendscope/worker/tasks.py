@@ -163,3 +163,12 @@ def analyze_creatives() -> dict[str, int]:
     settings = get_settings()
     with psycopg.connect(settings.database_url) as conn:
         return analyze_ads(conn, settings, datetime.now(UTC))
+
+
+@app.task(name="trendscope.retention")
+def retention() -> dict[str, int]:
+    from trendscope.maintenance.retention import apply_retention
+
+    settings = get_settings()
+    with psycopg.connect(settings.database_url) as conn:
+        return apply_retention(conn, datetime.now(UTC))
