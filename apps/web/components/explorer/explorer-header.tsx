@@ -11,6 +11,7 @@ export function ExplorerHeader({
   searchPlaceholder,
   exportHref,
   exportLabel,
+  extraExport,
   demo,
 }: {
   count: string;
@@ -18,6 +19,8 @@ export function ExplorerHeader({
   searchPlaceholder?: string;
   exportHref?: string;
   exportLabel?: string;
+  /** Tweede export (bv. B2B-leads), alleen voor plannen die het bevatten */
+  extraExport?: { href: string; label: string; hint: string };
   demo?: { label: string; hint: string };
 }) {
   return (
@@ -39,6 +42,13 @@ export function ExplorerHeader({
         <div className="flex flex-1 justify-center">
           <ExplorerTabs />
         </div>
+        {extraExport && (
+          <Tooltip content={extraExport.hint}>
+            <a href={extraExport.href} data-testid="leads-export" className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-[15px] font-medium shadow-sm transition hover:bg-surface-hover">
+              <Download className="size-4" /> {extraExport.label}
+            </a>
+          </Tooltip>
+        )}
         {exportHref ? (
           <a
             href={exportHref}

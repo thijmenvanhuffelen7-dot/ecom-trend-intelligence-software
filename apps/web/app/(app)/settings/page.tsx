@@ -8,6 +8,7 @@ import { Segmented } from "@/components/preference-switch";
 import { requireSession } from "@/lib/auth/server";
 import { getT } from "@/lib/i18n/server";
 import { TeamSection } from "@/components/team/team-section";
+import { IntegrationsSection } from "@/components/shopify/push-card";
 
 export const metadata = { title: "Settings" };
 
@@ -19,6 +20,7 @@ export default async function SettingsPage() {
   const rows: [string, React.ReactNode][] = [
     [t("settings.workspace"), session.workspace.name],
     [t("settings.plan"), <span key="p" className="flex items-center gap-2"><Badge tone="accent" className="capitalize">{plan.id}</Badge><Link href="/settings/billing" className="text-sm font-medium text-accent-strong hover:underline">{t("billing.title")} →</Link></span>],
+    [t("api.title"), <Link key="api" href="/settings/api" className="text-sm font-medium text-accent-strong hover:underline">{t("api.keys")} →</Link>],
     [t("settings.role"), <Badge key="r" className="capitalize">{session.role}</Badge>],
     [t("settings.language"), <Segmented key="l" kind="locale" value={t.locale} options={[{ value: "nl", label: "Nederlands" }, { value: "en", label: "English" }]} />],
     [t("settings.theme"), <Segmented key="t" kind="theme" value={theme} options={[{ value: "light", label: t("settings.light") }, { value: "dark", label: t("settings.dark") }]} />],
@@ -44,6 +46,7 @@ export default async function SettingsPage() {
           ))}
         </Card>
         <TeamSection session={session} t={t} />
+        <IntegrationsSection session={session} t={t} />
       </div>
     </div>
   );

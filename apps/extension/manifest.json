@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Trendscope — webshop-analyse",
+  "short_name": "Trendscope",
+  "version": "1.0.0",
+  "description": "Zie op elke webshop wat Trendscope weet: platform, apps, geschatte omvang, live ads en de sterkste producten.",
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": { "default_popup": "src/popup.html", "default_title": "Trendscope", "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } },
+  "background": { "service_worker": "src/background.js", "type": "module" },
+  "options_page": "src/options.html",
+  "permissions": ["storage", "tabs"],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*"],
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'" }
+}

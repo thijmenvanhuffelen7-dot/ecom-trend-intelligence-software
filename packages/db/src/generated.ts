@@ -182,6 +182,12 @@ export interface ApiKeys {
   workspace_id: string;
 }
 
+export interface ApiRateWindows {
+  count: Generated<number>;
+  key_id: string;
+  window_start: Timestamp;
+}
+
 export interface AuditLogs {
   action: string;
   actor_id: string | null;
@@ -616,6 +622,20 @@ export interface ScoreWeights {
   weights: Json;
 }
 
+export interface ShopConnections {
+  created_at: Generated<Timestamp>;
+  created_by: string | null;
+  id: Generated<string>;
+  last_error: string | null;
+  last_used_at: Timestamp | null;
+  mode: Generated<string>;
+  provider: Generated<string>;
+  shop_domain: string;
+  shop_name: string | null;
+  token_enc: string;
+  workspace_id: string;
+}
+
 export interface SignalScales {
   basis: Generated<Json>;
   created_at: Generated<Timestamp>;
@@ -635,6 +655,20 @@ export interface StoreCandidates {
   source: string;
   status: Generated<string>;
   store_id: Int8 | null;
+}
+
+export interface StorePushes {
+  cluster_id: Int8;
+  connection_id: string;
+  created_at: Generated<Timestamp>;
+  created_by: string | null;
+  error: string | null;
+  id: Generated<string>;
+  payload: Generated<Json>;
+  remote_admin_url: string | null;
+  remote_product_id: string | null;
+  status: string;
+  workspace_id: string;
 }
 
 export interface Stores {
@@ -842,6 +876,7 @@ export interface DB {
   alert_events: AlertEvents;
   alert_rules: AlertRules;
   api_keys: ApiKeys;
+  api_rate_windows: ApiRateWindows;
   audit_logs: AuditLogs;
   backtests: Backtests;
   board_items: BoardItems;
@@ -874,8 +909,10 @@ export interface DB {
   reddit_mentions: RedditMentions;
   score_weights: ScoreWeights;
   scores: Scores;
+  shop_connections: ShopConnections;
   signal_scales: SignalScales;
   store_candidates: StoreCandidates;
+  store_pushes: StorePushes;
   store_technologies: StoreTechnologies;
   stores: Stores;
   stripe_events: StripeEvents;

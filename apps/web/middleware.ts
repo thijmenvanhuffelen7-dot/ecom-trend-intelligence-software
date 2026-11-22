@@ -3,7 +3,7 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/token";
 
 // Openbaar: auth-pagina's, prijzen, webhooks (eigen handtekening) en cron (eigen CRON_SECRET)
-const PUBLIC_PATHS = ["/login", "/sign-in", "/sign-up", "/pricing", "/api/webhooks", "/api/cron", "/media/demo", "/api/health"];
+const PUBLIC_PATHS = ["/login", "/sign-in", "/sign-up", "/pricing", "/api/webhooks", "/api/cron", "/media/demo", "/api/health", "/api/v1", "/developers"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

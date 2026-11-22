@@ -97,8 +97,8 @@ jobs:
           uv sync --frozen
           uv run trendscope migrate-clickhouse
           RUN_INTEGRATION=1 uv run pytest -q -m integration
-      - name: Web-integratietests (Stripe-webhook met ondertekende events)
-        run: RUN_INTEGRATION=1 pnpm --filter @trendscope/web exec vitest run server/billing/webhook.test.ts
+      - name: Web-integratietests (Stripe-webhook, API-sleutels, rate limiting en quota)
+        run: RUN_INTEGRATION=1 pnpm --filter @trendscope/web exec vitest run
       - name: Demowereld voor e2e (seed + 14 dagen simulatie + zoekindex)
         working-directory: workers
         run: |

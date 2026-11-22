@@ -19,6 +19,7 @@ import { cn, daysBetween, formatCompact, formatMoney } from "@/lib/utils";
 import { getProduct } from "@/server/queries/products";
 import { clusterTikTok } from "@/server/queries/social";
 import { ProductAi } from "@/components/assistant/product-ai";
+import { PushCard } from "@/components/shopify/push-card";
 import { getReport, type AdCopy, type ProductReport } from "@/server/ai/reports";
 
 export const metadata = { title: "Product" };
@@ -306,6 +307,18 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
           clusterId={Number(id)}
           report={aiReport ? { ...aiReport, content: aiReport.content as unknown as ProductReport } : null}
           copy={aiCopy ? { ...aiCopy, content: aiCopy.content as unknown as AdCopy } : null}
+        />
+
+        <PushCard
+          session={session}
+          t={t}
+          clusterId={Number(id)}
+          defaults={{
+            title: c.canonical_title,
+            description: (aiCopy?.content as unknown as AdCopy | undefined)?.description ?? "",
+            // Prijsadvies uit het AI-rapport; anders de bovenkant van de marktprijs
+            price: (aiReport?.content as unknown as ProductReport | undefined)?.pricing?.recommended_price ?? c.max_price ?? (c.min_supplier_cost ? Math.round(c.min_supplier_cost * 3) - 0.05 : 19.95),
+          }}
         />
 
         {/* Leveranciers + marge */}

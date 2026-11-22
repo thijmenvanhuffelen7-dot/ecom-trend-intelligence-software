@@ -1,0 +1,28 @@
+:root { --bg: #ffffff; --fg: #111214; --muted: #6c7076; --border: #e6e7e9; --soft: #f5f6f7; --accent: #1fb95a; --accent-strong: #128a40; --warn: #a86b00; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121315; --fg: #f2f3f4; --muted: #9a9ea3; --border: #26282c; --soft: #1a1c1f; --accent-strong: #3fd57a; } }
+* { box-sizing: border-box; }
+body { margin: 0; width: 360px; font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--fg); }
+header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+header img { width: 20px; height: 20px; }
+header strong { flex: 1; }
+header a { color: var(--muted); text-decoration: none; font-size: 12px; }
+main { padding: 12px 14px 14px; }
+h1 { margin: 0; font-size: 15px; }
+.domain { color: var(--muted); font-size: 12px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+.stat { background: var(--soft); border-radius: 10px; padding: 8px 10px; }
+.stat b { display: block; font-size: 15px; }
+.stat span { color: var(--muted); font-size: 11px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 10px; }
+.chip { border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; font-size: 11px; color: var(--muted); }
+h2 { margin: 10px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+ul { list-style: none; margin: 0; padding: 0; }
+li { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+li:last-child { border: 0; }
+li a { flex: 1; color: var(--fg); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+li a:hover { text-decoration: underline; }
+.score { font-weight: 600; color: var(--accent-strong); font-variant-numeric: tabular-nums; }
+.cta { display: block; margin-top: 12px; text-align: center; background: var(--accent); color: #0b0c0d; font-weight: 600; border-radius: 10px; padding: 8px; text-decoration: none; }
+.note { color: var(--muted); font-size: 11px; margin-top: 8px; }
+.empty { color: var(--muted); padding: 8px 0; }
+button.link { background: none; border: 0; color: var(--accent-strong); padding: 0; font: inherit; cursor: pointer; text-decoration: underline; }

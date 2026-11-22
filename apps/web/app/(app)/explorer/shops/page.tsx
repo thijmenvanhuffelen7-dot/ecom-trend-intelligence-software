@@ -5,6 +5,7 @@ import { SavedViews } from "@/components/explorer/saved-views";
 import { ShopCard, ShopTable } from "@/components/explorer/shop-results";
 import { EmptyState } from "@/components/ui/misc";
 import { getT } from "@/lib/i18n/server";
+import { PLANS } from "@trendscope/core";
 import { requireSession } from "@/lib/auth/server";
 import { LimitBanner } from "@/components/billing/limit-banner";
 import { consumeSearch } from "@/server/billing/limits";
@@ -41,6 +42,7 @@ export default async function ShopsPage({ searchParams }: { searchParams: Promis
         searchPlaceholder={t("explorer.searchShops")}
         exportHref={`/api/export/shops?${exportQs}`}
         exportLabel={t("explorer.exportCsv")}
+        extraExport={PLANS[session.workspace.plan].limits.leads_export > 0 ? { href: `/api/export/leads?${exportQs}`, label: t("leads.export"), hint: t("leads.hint") } : undefined}
         demo={{ label: t("explorer.demoData"), hint: t("explorer.demoDataHint") }}
       />
 

@@ -2,7 +2,7 @@
 
 Trendscope is een all-in-one platform voor e-commerce trend- en concurrentie-intelligentie. Het koppelt producten, winkels, advertenties, creators, zoektrends en leveranciers aan elkaar. Elk product krijgt een **groeisnelheid**, een **validatiescore**, een **saturatiescore** en een **opportuniteitsscore**, en het platform laat altijd zien *waarom* een product zo scoort.
 
-> **Status: fase 10 is klaar (billing, limieten, team en admin).** Daaronder: AI-assistent (fase 9), alerts en integraties (fase 8), e-mailmarketing en funnels (fase 7), TikTok Shop en creators (fase 6), trenddetectie en live scoring (fase 5), productclustering en marktplaatsen (fase 4), ad intelligence (fase 3) en store intelligence (fase 2). Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de echte API's aanroept.
+> **Status: fase 11 is klaar (publieke API, Chrome-extensie, push-to-store en leads).** Daaronder: billing en admin (fase 10), AI-assistent (fase 9), alerts en integraties (fase 8), e-mailmarketing en funnels (fase 7), TikTok Shop en creators (fase 6), trenddetectie en live scoring (fase 5), productclustering en marktplaatsen (fase 4), ad intelligence (fase 3) en store intelligence (fase 2). Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de echte API's aanroept.
 > Architectuurplan: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Onderzoek naar de UX van TrendTrack: [`docs/research/trendtrack-ux.md`](docs/research/trendtrack-ux.md).
 
 | Shop Explorer | Winkeldetail |
@@ -62,6 +62,33 @@ Log in met elk e-mailadres; in dev-modus is geen wachtwoord nodig. Daarna volgt 
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | fase 10 | Billing |
 
 ---
+
+## Wat er in fase 11 gebouwd is (publieke API, Chrome-extensie, push-to-store en leads)
+
+- **Publieke REST API v1** (`/api/v1`, alleen-lezen):
+  - Endpoints: producten (lijst en detail, met de uitleg per score), winkels (lijst, detail en lookup per domein), trends en B2B-leads, plus `/me`.
+  - Dezelfde filters en queries als de explorers.
+  - Sleutels met scopes, beheerd onder Instellingen → API: de volledige sleutel wordt één keer getoond en we bewaren alleen de hash.
+  - Limieten: 120 verzoeken per minuut per sleutel, plus het maandquotum van het plan, met `X-RateLimit-*`- en `X-Quota-*`-headers.
+  - Schattingen zijn gemarkeerd met `is_estimate: true`.
+- **API-documentatie**: OpenAPI 3.1 op `/api/v1/openapi.json`, en een leesbare pagina op `/developers` die uit dezelfde specificatie wordt gegenereerd.
+- **Chrome-extensie** (`apps/extension`, Manifest V3, zonder build-stap):
+  - Op elke webshop een badge met de opportuniteit van het sterkste product.
+  - Een popup met platform, apps, geschatte omzet en bezoeken, live ads en de topproducten.
+  - Privacy: geen content scripts, alleen de hostnaam gaat naar je eigen omgeving, en host-toegang wordt alleen gevraagd voor je Trendscope-adres.
+  - Werkt met een `extension`-sleutel op elk plan waarvoor de flag aan staat.
+  - `pnpm --filter @trendscope/extension pack` maakt de zip voor de Web Store.
+- **Push-to-store**: koppel je Shopify-winkel (custom-app-token, versleuteld opgeslagen) en stuur een product vanaf de productpagina als concept naar Shopify.
+  - Titel, beschrijving uit de AI-ad-copy en een prijs uit het AI-prijsadvies zijn vooraf ingevuld en aan te passen.
+  - Er gaan geen foto's van andere winkels mee (auteursrecht).
+  - In mock-modus wordt de push gesimuleerd.
+- **B2B-leads**: een CSV vanuit de Shop Explorer (Business) en `/api/v1/leads`, met alleen publieke bedrijfsgegevens. Het quotum telt per rij. Zie [docs/legal/b2b-leads.md](docs/legal/b2b-leads.md).
+- **Tests**:
+  - Unit: sleutels, domeinnormalisatie, Shopify-calls (DRAFT, prijs op de variant, foutafhandeling, geen netwerk in mock-modus) en de extensielogica.
+  - Integratie: minuutlimiet, quotum, scopes en extensiesleutels tegen de echte database.
+  - E2E: de volledige API-flow inclusief intrekken, extensiesleutel op Pro, push-to-store, de leads-CSV, en het laden van de extensie in Chromium.
+
+Zie [ADR 0011](docs/adr/0011-fase-11-api-extensie-push.md).
 
 ## Wat er in fase 10 gebouwd is (billing, limieten, team en admin)
 
@@ -338,17 +365,18 @@ Zie [ADR 0002](docs/adr/0002-fase-2-store-intelligence.md) en [`docs/sources/`](
 - Er zijn nog geen deploy-workflows (Vercel/Hetzner) en geen Terraform.
 - Afwijkingen van het oorspronkelijke plan staan in [`docs/adr/0001-fase-1-keuzes.md`](docs/adr/0001-fase-1-keuzes.md).
 
-## Volgende stap: fase 11 (Chrome-extensie, push-to-store, publieke API en leads-export)
+## Volgende stap: fase 12 (lancering)
 
-- Een Chrome-extensie (MV3) die op elke webshop laat zien wat Trendscope weet.
-- Een product met één klik als concept naar je eigen Shopify-winkel.
-- Een publieke REST API v1 met API-sleutels, rate limiting en OpenAPI-documentatie.
-- Een B2B-leads-export van winkels, met alleen zakelijke gegevens.
+- Een publieke landingspagina, een privacy- en voorwaardenpagina, en polish van de onboarding.
+- Performance-metingen.
+- Deploy-configuratie: Vercel voor de web-app, Hetzner voor de workers, en een Terraform-skelet.
+- Een launch-checklist.
 
 ## Structuur
 
 ```
-apps/web            Next.js-app (UI, server actions, API-routes)
+apps/web            Next.js-app (UI, server actions, API-routes, publieke API v1)
+apps/extension      Chrome-extensie (Manifest V3, plain ES modules)
 packages/db         Kysely-client + gegenereerde types (bron: SQL-migraties)
 packages/core       Domeinlogica: plannen/limieten, rechten, schattingen, unit economics
 workers/            Python: connectors, HTTP-client, scoring, seed, CLI

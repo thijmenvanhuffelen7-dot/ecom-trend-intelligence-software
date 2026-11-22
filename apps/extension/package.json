@@ -1,0 +1,14 @@
+{
+  "name": "@trendscope/extension",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Trendscope voor Chrome (Manifest V3): winkelanalyse op elke webshop",
+  "scripts": {
+    "test": "vitest run",
+    "pack": "sh scripts/pack.sh"
+  },
+  "devDependencies": {
+    "vitest": "^5.1.1"
+  }
+}
