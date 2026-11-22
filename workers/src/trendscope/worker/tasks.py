@@ -113,3 +113,43 @@ def backtest() -> list[dict[str, Any]]:
 
     with psycopg.connect(get_settings().database_url) as conn:
         return run_backtests(conn, get_client(), datetime.now(UTC).date())
+
+
+@app.task(name="trendscope.emails")
+def emails(subscribe: bool = False) -> dict[str, int]:
+    """Seed-mailbox via IMAP inlezen (en eventueel nieuwe winkels inschrijven)."""
+    from trendscope.core.clients import http_client_for
+    from trendscope.emails.ingest import run_email_cycle
+    from trendscope.emails.mailsource import ImapSource
+
+    settings = get_settings()
+    if not settings.email_imap_host:
+        return {"skipped_no_imap": 1}
+    source = ImapSource(settings.email_imap_host, settings.email_imap_user, settings.email_imap_password)
+    with (
+        psycopg.connect(settings.database_url) as conn,
+        http_client_for(load_manifests()["seed_mailbox"], settings) as client,
+    ):
+        return run_email_cycle(conn, settings, datetime.now(UTC), client=client, source=source, subscribe=subscribe)
+
+
+@app.task(name="trendscope.deliver_alerts")
+def deliver_alerts() -> dict[str, int]:
+    """Openstaande meldingen naar Slack/Discord/Telegram/webhook/e-mail sturen (met retries) en e-mails verzenden."""
+    import httpx
+
+    from trendscope.alerts.deliver import deliver_pending, send_outbound_emails
+
+    settings = get_settings()
+    with psycopg.connect(settings.database_url) as conn, httpx.Client(follow_redirects=False) as client:
+        stats = deliver_pending(conn, settings, client, datetime.now(UTC))
+        return stats | {f"email_{k}": v for k, v in send_outbound_emails(conn, settings, client).items()}
+
+
+@app.task(name="trendscope.digests")
+def digests() -> dict[str, int]:
+    from trendscope.alerts.digest import send_digests
+
+    settings = get_settings()
+    with psycopg.connect(settings.database_url) as conn:
+        return send_digests(conn, settings, datetime.now(UTC))

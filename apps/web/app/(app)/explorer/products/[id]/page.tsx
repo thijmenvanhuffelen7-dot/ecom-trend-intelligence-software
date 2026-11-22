@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Check, Clock, Eye, Factory, Heart, History, Image as ImageIcon, Info, Megaphone, Play, ShoppingBag, Sparkles, Star, Store, TrendingUp, Type, Video } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Clapperboard, Clock, Eye, Factory, Heart, History, Image as ImageIcon, Info, Megaphone, Play, ShoppingBag, Sparkles, Star, Store, TrendingUp, Type, Video } from "lucide-react";
 import type { Phase, SignalBreakdown } from "@trendscope/core";
 import { AreaChart, ForecastChart } from "@/components/charts";
 import { SupplierFinder } from "@/components/product/supplier-finder";
@@ -16,6 +16,7 @@ import type { Translator } from "@/lib/i18n/translate";
 import { NICHE_EMOJI } from "@/lib/niches";
 import { cn, daysBetween, formatCompact, formatMoney } from "@/lib/utils";
 import { getProduct } from "@/server/queries/products";
+import { clusterTikTok } from "@/server/queries/social";
 
 export const metadata = { title: "Product" };
 
@@ -113,6 +114,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   const t = await getT();
   const data = await getProduct(Number(id), session.workspace.id);
   if (!data) notFound();
+  const tiktok = await clusterTikTok(data.cluster.id);
   const { cluster: c } = data;
   const L = t.locale;
   const b = c.breakdown;
@@ -351,6 +353,37 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
             </ul>
           )}
         </Card>
+
+        {tiktok.length > 0 && (
+          <Card data-testid="tiktok-shop">
+            <CardHeader icon={<Clapperboard />} title={t("social.tiktokShopTitle")} hint={t("social.gmvHint")} action={<Badge>{tiktok.length}</Badge>} />
+            <table className="w-full border-t border-border text-sm">
+              <thead className="text-left text-xs text-fg-muted">
+                <tr>
+                  <th className="px-5 py-2 font-medium">{t("social.col.shop")}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("social.col.price")}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("social.col.sold30")}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("social.col.gmv30")}</th>
+                  <th className="px-5 py-2 text-right font-medium">{t("social.col.commission")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tiktok.map((p) => (
+                  <tr key={p.id} className="border-t border-border">
+                    <td className="px-5 py-2.5">
+                      <p className="font-medium">{p.shop_name}</p>
+                      <p className="max-w-[420px] truncate text-xs text-fg-muted">{p.title}</p>
+                    </td>
+                    <td className="tabular px-3 py-2.5 text-right">{formatMoney(p.price, p.currency ?? "EUR", L)}</td>
+                    <td className="tabular px-3 py-2.5 text-right font-semibold">{p.orders_30d != null ? formatCompact(p.orders_30d, L) : "—"}</td>
+                    <td className="tabular px-3 py-2.5 text-right">≈ {formatMoney((p.orders_30d ?? 0) * Number(p.price ?? 0), p.currency ?? "EUR", L, true)}</td>
+                    <td className="tabular px-5 py-2.5 text-right">{p.commission_rate != null ? `${Math.round(p.commission_rate * 100)}%` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        )}
 
         <div className="grid gap-5 xl:grid-cols-2">
           <Card>

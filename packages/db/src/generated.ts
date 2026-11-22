@@ -47,6 +47,9 @@ export type WorkspaceRole = "admin" | "member" | "owner";
 
 export interface Ads {
   advertiser_id: Int8 | null;
+  ai_summary: Json | null;
+  analyzed_at: Timestamp | null;
+  angle: string | null;
   body: string | null;
   content_hash: string | null;
   countries: Generated<string[]>;
@@ -60,6 +63,7 @@ export interface Ads {
   first_seen: Generated<Timestamp>;
   format: string | null;
   headline: string | null;
+  hook: string | null;
   id: Generated<Int8>;
   impressions_high: Int8 | null;
   impressions_low: Int8 | null;
@@ -104,21 +108,62 @@ export interface Advertisers {
   verified: boolean | null;
 }
 
+export interface AiConversations {
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  messages: Generated<Json>;
+  model: string;
+  title: string;
+  updated_at: Generated<Timestamp>;
+  user_id: string | null;
+  workspace_id: string;
+}
+
+export interface AiReports {
+  content: Json;
+  created_at: Generated<Timestamp>;
+  entity_id: Int8;
+  entity_type: EntityType;
+  id: Generated<Int8>;
+  input_hash: string;
+  kind: string;
+  locale: Generated<string>;
+  model: string;
+}
+
+export interface AlertDeliveries {
+  attempts: Generated<number>;
+  channel_id: string | null;
+  event_id: Int8;
+  id: Generated<Int8>;
+  last_error: string | null;
+  next_attempt_at: Generated<Timestamp>;
+  sent_at: Timestamp | null;
+  status: Generated<string>;
+}
+
 export interface AlertEvents {
+  dedupe_key: string | null;
+  entity_id: Int8 | null;
+  entity_type: EntityType | null;
   id: Generated<Int8>;
   payload: Json;
   read_at: Timestamp | null;
   rule_id: string;
+  title: string | null;
   triggered_at: Generated<Timestamp>;
   workspace_id: string;
 }
 
 export interface AlertRules {
   channels: Generated<Json>;
+  cooldown_hours: Generated<number>;
   created_at: Generated<Timestamp>;
   created_by: string | null;
   enabled: Generated<boolean>;
   id: Generated<string>;
+  last_evaluated_at: Timestamp | null;
+  last_triggered_at: Timestamp | null;
   name: string;
   rule: Json;
   workspace_id: string;
@@ -295,6 +340,40 @@ export interface CuratedLists {
   updated_at: Generated<Timestamp>;
 }
 
+export interface Emails {
+  body_html: string | null;
+  body_text: string | null;
+  discount_code: string | null;
+  discount_pct: number | null;
+  esp: string | null;
+  free_shipping: Generated<boolean>;
+  id: Generated<Int8>;
+  links: Generated<Json>;
+  message_id: string;
+  preheader: string | null;
+  received_at: Timestamp;
+  screenshot_url: string | null;
+  sender: string;
+  sender_name: string | null;
+  store_id: Int8 | null;
+  subject: string;
+  subscription_id: Int8 | null;
+  type: string;
+  urgency: Generated<boolean>;
+}
+
+export interface EmailSubscriptions {
+  address: string;
+  confirmed_at: Timestamp | null;
+  error: string | null;
+  id: Generated<Int8>;
+  mailbox_id: Int8;
+  method: string | null;
+  status: Generated<string>;
+  store_id: Int8;
+  subscribed_at: Timestamp | null;
+}
+
 export interface EntityLinks {
   confidence: Generated<number>;
   evidence: Generated<Json>;
@@ -363,6 +442,16 @@ export interface Livestreams {
   units_sold: number | null;
 }
 
+export interface Mailboxes {
+  address: string;
+  created_at: Generated<Timestamp>;
+  id: Generated<Int8>;
+  is_active: Generated<boolean>;
+  last_sync: Timestamp | null;
+  last_uid: Generated<Int8>;
+  provider: Generated<string>;
+}
+
 export interface Memberships {
   created_at: Generated<Timestamp>;
   role: Generated<WorkspaceRole>;
@@ -376,6 +465,33 @@ export interface Niches {
   name_nl: string;
   parent_id: Int8 | null;
   slug: string;
+}
+
+export interface NotificationChannels {
+  config_enc: string;
+  created_at: Generated<Timestamp>;
+  created_by: string | null;
+  enabled: Generated<boolean>;
+  id: Generated<string>;
+  last_error: string | null;
+  last_used_at: Timestamp | null;
+  name: string;
+  target_hint: string;
+  type: string;
+  workspace_id: string;
+}
+
+export interface OutboundEmails {
+  created_at: Generated<Timestamp>;
+  error: string | null;
+  html: string;
+  id: Generated<Int8>;
+  kind: string;
+  provider_id: string | null;
+  sent_at: Timestamp | null;
+  status: Generated<string>;
+  subject: string;
+  to_address: string;
 }
 
 export interface ProductClusters {
@@ -508,6 +624,7 @@ export interface StoreCandidates {
 export interface Stores {
   ads_growth_30d: number | null;
   ads_launched_total: Generated<number>;
+  avg_discount_pct: number | null;
   bestseller_source: string | null;
   brand_color: string | null;
   country: string | null;
@@ -515,6 +632,8 @@ export interface Stores {
   data_source: Generated<string>;
   description: string | null;
   domain: string;
+  email_esp: string | null;
+  emails_per_week: number | null;
   est_revenue: Json | null;
   est_traffic: Json | null;
   first_seen: Generated<Timestamp>;
@@ -617,6 +736,8 @@ export interface UsageCounters {
 export interface Users {
   auth_provider_id: string | null;
   created_at: Generated<Timestamp>;
+  digest: Generated<string>;
+  digest_last_sent: Timestamp | null;
   email: string;
   id: Generated<string>;
   is_platform_admin: Generated<boolean>;
@@ -672,6 +793,9 @@ export interface Workspaces {
 export interface DB {
   ads: Ads;
   advertisers: Advertisers;
+  ai_conversations: AiConversations;
+  ai_reports: AiReports;
+  alert_deliveries: AlertDeliveries;
   alert_events: AlertEvents;
   alert_rules: AlertRules;
   api_keys: ApiKeys;
@@ -688,14 +812,19 @@ export interface DB {
   creators: Creators;
   curated_list_items: CuratedListItems;
   curated_lists: CuratedLists;
+  email_subscriptions: EmailSubscriptions;
+  emails: Emails;
   entity_links: EntityLinks;
   feature_flags: FeatureFlags;
   forecasts: Forecasts;
   keywords: Keywords;
   livestream_products: LivestreamProducts;
   livestreams: Livestreams;
+  mailboxes: Mailboxes;
   memberships: Memberships;
   niches: Niches;
+  notification_channels: NotificationChannels;
+  outbound_emails: OutboundEmails;
   product_clusters: ProductClusters;
   products: Products;
   reddit_mentions: RedditMentions;

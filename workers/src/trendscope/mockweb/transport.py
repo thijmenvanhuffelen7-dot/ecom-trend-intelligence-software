@@ -80,6 +80,14 @@ class MockWebTransport(httpx.BaseTransport):
             raise httpx.ConnectError(f"Name or service not known: {host}", request=request)
         path = request.url.path
         day = self.day
+        if request.method == "POST" and path == "/contact":
+            from trendscope.mockweb.email_world import needs_challenge
+
+            if needs_challenge(host):
+                return httpx.Response(
+                    200, html='<html><body><div class="h-captcha" data-sitekey="x"></div></body></html>'
+                )
+            return httpx.Response(200, html="<html><body><p>Thanks for subscribing</p></body></html>")
         if path == "/robots.txt":
             body = (
                 pages.SHOPIFY_ROBOTS.format(domain=host)
@@ -640,7 +648,7 @@ class MockWebTransport(httpx.BaseTransport):
                 (c, v)
                 for c in tt.creators()
                 for v in tt.videos_until(c, day)
-                if q.split(" review")[0] in str(v["caption"]).lower()
+                if q.split(" review")[0] in str(v["cover_seed"]).lower()
             ][:25]
             return httpx.Response(
                 200, json={"items": [{"id": {"kind": "youtube#video", "videoId": f"yt{v['id']}"}} for _, v in hits]}
@@ -657,7 +665,7 @@ class MockWebTransport(httpx.BaseTransport):
                                 "snippet": {
                                     "channelId": f"UC{c.handle}",
                                     "channelTitle": c.name,
-                                    "title": str(v["caption"]).split("#")[0].strip() + " (review)",
+                                    "title": f"{v['cover_seed']} review: {str(v['caption']).split('#')[0].strip()}",
                                     "description": "",
                                     "publishedAt": ts(int(v["posted_day"])),
                                     "thumbnails": {"medium": {"url": f"https://i.ytimg.com/vi/{v['cover_seed']}.png"}},

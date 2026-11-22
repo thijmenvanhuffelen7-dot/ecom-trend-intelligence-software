@@ -62,9 +62,9 @@ def _add_target(
 ) -> None:
     conn.execute(
         """INSERT INTO crawl_targets (connector_id, target, entity_type, entity_id, priority, interval_secs, next_run_at)
-           SELECT %s, %s, %s, %s, %s, 86400, %s
-           WHERE NOT EXISTS (SELECT 1 FROM crawl_targets WHERE connector_id = %s AND target = %s)""",
-        (connector, target, entity_type, entity_id, priority, now, connector, target),
+           VALUES (%s, %s, %s, %s, %s, 86400, %s)
+           ON CONFLICT (connector_id, target) DO NOTHING""",  # parallelle ontdekking kan hetzelfde target vinden
+        (connector, target, entity_type, entity_id, priority, now),
     )
 
 
@@ -160,7 +160,7 @@ def upsert_shop_products(
 
 def refresh_shop_metrics(conn: psycopg.Connection[Any], ch: ClickHouse, shop_pk: int, now: datetime) -> None:
     """Verkopen 30d per product = tellerstand nu − 30 dagen geleden; GMV = Σ verkopen × prijs (schatting)."""
-    rows = conn.execute("SELECT id, price FROM products WHERE tiktok_shop_id = %s", (shop_pk,)).fetchall()
+    rows = conn.execute("SELECT id, price FROM products WHERE tiktok_shop_id = %s ORDER BY id", (shop_pk,)).fetchall()
     if not rows:
         return
     ids = [int(r[0]) for r in rows]
@@ -277,6 +277,8 @@ def run_creator(
     key: str,
     handle: str,
     now: datetime,
+    *,
+    store_images: bool = False,
 ) -> dict[str, int]:
     c, vids, lives = partner.creator(client, base, key, handle)
     contact = {"business_email": c.business_email} if c.business_email else None
@@ -309,15 +311,17 @@ def run_creator(
             product = anchors.get(v.product_id or "")
             cluster_id = product[1] if product else _cluster_of_title(conn, v.caption.split("#")[0])
             prev = cur.execute(
-                "SELECT views FROM videos WHERE platform = 'tiktok' AND external_id = %s", (v.video_id,)
+                "SELECT views, thumbnail_url FROM videos WHERE platform = 'tiktok' AND external_id = %s", (v.video_id,)
             ).fetchone()
+            # Cover één keer kopiëren (in productie alleen na juridisch akkoord, zie STORE_MARKETPLACE_IMAGES)
+            cover = prev[1] if prev and prev[1] else (_image(client, v.cover_url, store_images)[1] or v.cover_url)
             views_24h = v.views - int(prev[0]) if prev and prev[0] is not None else None
             cur.execute(
                 """INSERT INTO videos (platform, external_id, creator_id, url, caption, hashtags, thumbnail_url, posted_at,
                      views, likes, comments, shares, views_24h, product_id, last_crawled)
                    VALUES ('tiktok', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                    ON CONFLICT (platform, external_id) DO UPDATE SET views = EXCLUDED.views, likes = EXCLUDED.likes,
-                     comments = EXCLUDED.comments, shares = EXCLUDED.shares,
+                     comments = EXCLUDED.comments, shares = EXCLUDED.shares, thumbnail_url = EXCLUDED.thumbnail_url,
                      views_24h = COALESCE(EXCLUDED.views_24h, videos.views_24h), creator_id = EXCLUDED.creator_id,
                      product_id = EXCLUDED.product_id, last_crawled = EXCLUDED.last_crawled
                    RETURNING id""",
@@ -327,7 +331,7 @@ def run_creator(
                     v.url,
                     v.caption,
                     hashtags_of(v.caption),
-                    v.cover_url,
+                    cover,
                     v.posted_at,
                     v.views,
                     v.likes,
@@ -609,7 +613,14 @@ def run_social_target(
         shop_pk = _upsert_shop(conn, s, now)
         conn.commit()
         stats = upsert_shop_products(conn, ch, client, shop_pk, s.products, now, store_images=store_images)
-        refresh_shop_metrics(conn, ch, shop_pk, now)
+        for attempt in range(3):  # parallelle crawls kunnen elkaar kruisen; Postgres breekt er één af → opnieuw
+            try:
+                refresh_shop_metrics(conn, ch, shop_pk, now)
+                break
+            except psycopg.errors.DeadlockDetected:
+                conn.rollback()
+                if attempt == 2:
+                    raise
         touched = [
             int(r[0])
             for r in conn.execute(
@@ -622,6 +633,6 @@ def run_social_target(
                 refresh_cluster(cur, cid)
         return CrawlOutcome("succeeded", items=len(s.products), stats=stats)
     if kind == "creator":
-        stats = run_creator(conn, ch, client, base, key, arg, now)
+        stats = run_creator(conn, ch, client, base, key, arg, now, store_images=store_images)
         return CrawlOutcome("succeeded", items=stats["videos"], stats=stats)
     raise ValueError(f"Onbekend target {raw}")

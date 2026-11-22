@@ -346,3 +346,30 @@ def hashtags(title: str, salt: object) -> str:
     if h % 3 == 0:
         return ""  # niet elke ad gebruikt hashtags
     return f" #{core} #{GENERIC_HASHTAGS[h % len(GENERIC_HASHTAGS)]}"
+
+
+# Funnel-apps: pop-ups, urgentie, upsells, loyaliteit, quiz/chat. Per winkel gekozen via een hash van het domein,
+# zodat de rest van de (random) seed niet verschuift.
+FUNNEL_APPS = [
+    "Privy",
+    "Justuno",
+    "OptiMonk",
+    "Wheelio",
+    "Hextom Free Shipping Bar",
+    "Hurrify",
+    "Sales Pop",
+    "Frequently Bought Together",
+    "Bold Upsell",
+    "Smile.io",
+    "LoyaltyLion",
+    "Octane AI",
+    "Tidio",
+]
+
+
+def funnel_apps(domain: str) -> list[str]:
+    import zlib
+
+    h = zlib.crc32(domain.encode())
+    n = 2 + h % 3
+    return [FUNNEL_APPS[(h // 7 + i * 5) % len(FUNNEL_APPS)] for i in range(n)]

@@ -34,14 +34,14 @@ test("marketplace filter and product detail with matched listings and supplier f
   await expect(page.getByLabel("BTW")).toHaveValue("21");
 });
 
-test("self-discovered product shows pending score instead of a fake one", async ({ page }) => {
+test("self-discovered marketplace product: listings plus an explained score (or 'pending')", async ({ page }) => {
   await login(page);
-  await page.goto("/explorer/products?source=marketplaces&sort=marketplace_orders");
-  const pending = page.locator("tbody tr").filter({ hasText: "Score volgt" }).first();
-  await expect(pending).toBeVisible();
-  await pending.getByRole("link").first().click();
-  await expect(page.getByTestId("score-pending")).toBeVisible();
+  // "Electric Scalp Massager" bestaat alleen op marktplaatsen; de clustering maakte er zelf een product van
+  await page.goto("/explorer/products?source=marketplaces&q=Electric%20Scalp");
+  await page.locator("tbody tr").first().getByRole("link").first().click();
   await expect(page.getByTestId("marketplace-listings")).toBeVisible();
+  // Na 7 dagen data volgt een echte, uitgelegde score; daarvoor "Score volgt" — nooit een verzonnen getal
+  await expect(page.getByTestId("score-pending").or(page.getByText("Waarom deze score?"))).toBeVisible();
 });
 
 test("admin shows clustering health", async ({ page }) => {

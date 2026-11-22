@@ -30,6 +30,14 @@ app.conf.update(
         "screenshots": {"task": "trendscope.screenshots", "schedule": crontab(minute=40)},
         "clustering": {"task": "trendscope.cluster", "schedule": crontab(minute="5,35")},
         "daily-scoring": {"task": "trendscope.score_daily", "schedule": crontab(hour=4, minute=50)},
+        "email-sync": {"task": "trendscope.emails", "schedule": crontab(minute="*/15")},
+        "email-subscribe": {
+            "task": "trendscope.emails",
+            "schedule": crontab(hour=6, minute=10),
+            "kwargs": {"subscribe": True},
+        },
+        "alert-delivery": {"task": "trendscope.deliver_alerts", "schedule": 60.0},
+        "digests": {"task": "trendscope.digests", "schedule": crontab(minute=25)},
         "weekly-backtest": {"task": "trendscope.backtest", "schedule": crontab(day_of_week=1, hour=5, minute=20)},
     },
 )

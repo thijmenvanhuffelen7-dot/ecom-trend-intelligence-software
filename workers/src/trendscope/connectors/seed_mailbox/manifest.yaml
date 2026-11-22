@@ -1,0 +1,14 @@
+id: seed_mailbox
+display_name: Seed-mailboxen (nieuwsbrieven via eigen inbox)
+kind: user_provided
+legal_basis_doc: docs/sources/seed_mailbox.md
+legal_review: pending
+respects_robots_txt: true   # inschrijven via het openbare formulier; CAPTCHA → handmatig
+default_rate_limit:
+  per_domain_rps: 0.2
+  global_rps: 1
+requires_credentials: [EMAIL_IMAP_HOST, EMAIL_IMAP_USER, EMAIL_IMAP_PASSWORD]
+personal_data: none   # eigen mailbox, alleen marketingmail van bedrijven
+retention_days: 730
+freshness_sla_hours: 24
+module: null

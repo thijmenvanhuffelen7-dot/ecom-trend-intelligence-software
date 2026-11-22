@@ -2,7 +2,7 @@
 
 Trendscope is een all-in-one platform voor e-commerce trend- en concurrentie-intelligentie. Het koppelt producten, winkels, advertenties, creators, zoektrends en leveranciers aan elkaar. Elk product krijgt een **groeisnelheid**, een **validatiescore**, een **saturatiescore** en een **opportuniteitsscore**, en het platform laat altijd zien *waarom* een product zo scoort.
 
-> **Status: fase 5 is klaar (trenddetectie en live scoring).** Zoekinteresse per land, Reddit en hashtags komen binnen als vraagsignalen. Elke dag worden alle producten opnieuw gescoord uit echte metingen, met een uitleg per score, een forecast van 90 dagen en een backtest die laat zien hoe goed de scores voorspellen. Daaronder: productclustering en marktplaatsen (fase 4), ad intelligence (fase 3) en store intelligence (fase 2). Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de officiële API's aanroept.
+> **Status: fase 8 is klaar (alerts en integraties).** Daaronder: e-mailmarketing en funnels (fase 7), TikTok Shop en creators (fase 6), trenddetectie en live scoring (fase 5), productclustering en marktplaatsen (fase 4), ad intelligence (fase 3) en store intelligence (fase 2). Alles draait op een deterministisch "nep-internet", met precies de productiecode die straks de echte API's aanroept.
 > Architectuurplan: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Onderzoek naar de UX van TrendTrack: [`docs/research/trendtrack-ux.md`](docs/research/trendtrack-ux.md).
 
 | Shop Explorer | Winkeldetail |
@@ -48,11 +48,75 @@ Log in met elk e-mailadres; in dev-modus is geen wachtwoord nodig. Daarna volgt 
 | `CJ_API_KEY` | live marktplaatsen | CJ Dropshipping API v2 |
 | `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` | live trends | Zoekinteresse (Google Trends via DataForSEO, tot de officiële Trends API open is) |
 | `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET` | live trends | Reddit Data API (commercieel gebruik vereist een overeenkomst met Reddit) |
+| `TIKTOK_PARTNER_BASE_URL`, `TIKTOK_PARTNER_API_KEY` | live social | TikTok Shop- en creatordata via een gelicentieerde datapartner (geen officiële API voor derden) |
+| `YOUTUBE_API_KEY` | live social | YouTube Data API v3 |
+| `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID` | live social | Instagram Graph API (Business Discovery, eigen Business-account) |
+| `EMAIL_IMAP_HOST`, `EMAIL_IMAP_USER`, `EMAIL_IMAP_PASSWORD`, `EMAIL_SEED_DOMAIN` | live e-mail | Seed-mailbox op een eigen domein (IMAP, alleen-lezen) |
+| `APP_ENCRYPTION_KEY` | productie | Versleutelt kanaalsecrets (webhook-URL's, bot-tokens); `openssl rand -base64 32` |
+| `CRON_SECRET` | productie | Beveiligt `/api/cron/alerts` (Vercel Cron) |
+| `RESEND_API_KEY`, `EMAIL_FROM` | live e-mail | Digests en e-mailalerts (zonder sleutel: alleen gelogd) |
 | `CHROME_PATH` | optioneel | Chromium voor Playwright-screenshots |
 | `ANTHROPIC_API_KEY` | fase 9 | AI-assistent en rapporten |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | fase 10 | Billing |
 
 ---
+
+## Wat er in fase 8 gebouwd is (watchlists, alerts, digests en integraties)
+
+- **Regelbouwer** (`/alerts`), zonder code, met zeven begrensde soorten regels (zod-schema in `@trendscope/core`):
+  - score boven of onder een grens;
+  - faseverandering;
+  - winkel voegt veel producten toe;
+  - adverteerder start veel ads;
+  - zoekterm of hashtag groeit snel;
+  - prijsdaling bij een gevolgde concurrent;
+  - nieuwe winkel in een niche.
+
+  Per regel kies je een bereik (wat je volgt, of alles), kanalen en een cooldown.
+- **Evaluatie**: de knop "Nu controleren" en de cron-route `/api/cron/alerts` (Vercel Cron, elke 15 minuten, met `CRON_SECRET`). Meldingen worden ontdubbeld per entiteit en cooldown. De bel in de zijbalk toont het aantal ongelezen meldingen.
+- **Kanalen**: in de app, e-mail (Resend), Slack, Discord, Telegram en een generieke webhook (HMAC-SHA256-ondertekend). De worker bezorgt met retries en weigert privé-adressen (SSRF-bescherming bij opslaan én bij verzenden). Secrets staan versleuteld (AES-256-GCM, hetzelfde formaat in Node en Python) en worden nooit meer getoond.
+- **Digests** per gebruiker (uit, dagelijks of wekelijks): nieuwe meldingen, de sterkste kansen in de eigen niches en opkomende zoektermen.
+- **Tests**:
+  - schema en SSRF-regels (vitest);
+  - payloads per kanaal, de webhookhandtekening en de versleuteling over de taalgrens heen (pytest);
+  - bezorging, retries, het weigeren van privé-doelen en het eenmaal-per-periode-gedrag van digests (integratie);
+  - de volledige flow van kanaal tot regel tot melding tot bel (e2e).
+
+Zie [ADR 0008](docs/adr/0008-fase-8-alerts.md).
+
+## Wat er in fase 7 gebouwd is (e-mailmarketing en funnel-analyse)
+
+- **Seed-mailbox** ([`seed_mailbox.md`](docs/sources/seed_mailbox.md)): per winkel een eigen plus-adres, ingeschreven via het openbare Shopify-formulier. Bij een CAPTCHA wordt de inschrijving `manual`; we omzeilen niets. Mails lezen we alleen-lezend via IMAP in (UID-incrementeel, idempotent op Message-ID).
+- **Verwerking**:
+  - type (welkom, bevestiging, promotie, lancering, nieuwsbrief, verlaten winkelmand, transactioneel), met regels in NL/EN/DE;
+  - hoogste korting, kortingscode, gratis verzending en urgentie;
+  - het verzendplatform uit de headers;
+  - productlinks gekoppeld aan producten van de winkel.
+
+  Per winkel: mails per week, gemiddelde korting en het e-mailplatform.
+- **E-mailarchief** (`/explorer/emails`) met filters (type, minimale korting, urgentie) en een **viewer**. De HTML wordt eerst gesaneerd (getest) en dan in een sandbox-iframe zonder scripts of same-origin getoond. Trackingpixels gaan eruit, en externe afbeeldingen laden pas na een klik.
+- **Funnel-analyse** op de winkelpagina: tools per stap (landing, capture, product, winkelmand, checkout en retentie), herkend met 13 nieuwe signaturen voor pop-ups, spin-wheels, urgentie, bundels, upsells, gratis-verzendbalken, loyaliteit, quiz en chat.
+
+Zie [ADR 0007](docs/adr/0007-fase-7-email-funnels.md).
+
+## Wat er in fase 6 gebouwd is (TikTok Shop, creators, video's en livestreams)
+
+- **Bronnen**, elk met manifest en juridische notitie:
+  - **TikTok Shop en creators** via een datapartner ([`tiktok_shop_partner.md`](docs/sources/tiktok_shop_partner.md)). TikTok heeft voor deze data van derden geen officiële API. De connector staat op *pending/hoog risico* en gebruikt een neutraal datacontract met een adapter per partner.
+  - **YouTube Data API v3** ([`youtube_data.md`](docs/sources/youtube_data.md)) en **Instagram Business Discovery** ([`instagram_business.md`](docs/sources/instagram_business.md)).
+- **Pipeline** (`workers/src/trendscope/social/`):
+  - categorie-ontdekking maakt shop- en creator-targets aan;
+  - van elk product bewaren we de verkochtteller als snapshot, zodat verkopen per dag en per 30 dagen verschillen tussen onze eigen metingen zijn;
+  - TikTok Shop-producten clusteren met de bestaande producten;
+  - video's koppelen we via het productanker (of via de titel);
+  - livestreams leggen we vast met het aantal verkochte stuks per product.
+- **Schattingen**: GMV van een shop en van een livestream (tellerstand × prijs, betrouwbaarheid *medium*) en GMV van een creator (views × CTR × conversie + live-verkopen, *laag*), altijd met methode en bandbreedte.
+- **Scoring**: de signalen `tiktokshop` (verkochte stuks per dag) en `social` (videoviews per dag) zijn nu live.
+- **Social-sectie** (`/social`) met vijf rankings: producten (verkopen per dag als sparkline, GMV, commissie), shops, creators, video's (snelste groei in 24 uur) en livestreams. Creator-discovery met filters op niche, platform, volgers, engagement en zakelijk contact. Een creatorpagina met volgersgroei, video's, gepromote producten en livestreams.
+- **Productdetail**: een kaart "Op TikTok Shop" met shops, verkopen, GMV en commissie.
+- **AVG**: alleen publieke profielen, en contact alleen als zelf gepubliceerd zakelijk e-mailadres. Daar zijn tests voor.
+
+Zie [ADR 0006](docs/adr/0006-fase-6-social-commerce.md).
 
 ## Wat er in fase 5 gebouwd is (trenddetectie en live scoring)
 
@@ -230,10 +294,10 @@ Zie [ADR 0002](docs/adr/0002-fase-2-store-intelligence.md) en [`docs/sources/`](
 - Er zijn nog geen deploy-workflows (Vercel/Hetzner) en geen Terraform.
 - Afwijkingen van het oorspronkelijke plan staan in [`docs/adr/0001-fase-1-keuzes.md`](docs/adr/0001-fase-1-keuzes.md).
 
-## Volgende stap: fase 6 (TikTok Shop, creators, video's en livestreams)
+## Volgende stap: fase 9 (AI-assistent, rapporten, transcriptie en OCR)
 
-- TikTok Shop-producten en -shops, creators met groei en engagement, video's en livestreams, met GMV-schattingen die als schatting gelabeld zijn.
-- Het social- en tiktokshop-signaal in de scoring, en video-hashtags in de trends.
+- Chat met de data in natuurlijke taal (Claude met tools over de eigen database), AI-rapporten per product en niche, en generatoren voor ad-copy en productbeschrijvingen.
+- Video-transcriptie en OCR op ad-creatives, met hook-analyse.
 
 ## Structuur
 

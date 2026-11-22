@@ -16,6 +16,7 @@ dependencies = [
   "boto3>=1.44.7",
   "playwright>=1.65.2",
   "pillow>=11",
+  "cryptography>=44",
 ]
 
 [dependency-groups]

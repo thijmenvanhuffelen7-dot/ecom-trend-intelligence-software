@@ -138,7 +138,9 @@ def run(reset: bool = True) -> dict[str, int]:
                 """TRUNCATE niches, stores, store_technologies, product_clusters, products, cluster_members,
                    suppliers, supplier_offers, advertisers, ads, creators, videos, keywords, entity_links,
                    scores, score_weights, connectors, crawl_targets, crawl_jobs, curated_lists, curated_list_items,
-                   watchlists, alert_rules, alert_events, store_candidates RESTART IDENTITY CASCADE"""
+                   watchlists, alert_rules, alert_events, store_candidates, cluster_merges, reddit_mentions,
+                   signal_scales, forecasts, backtests, tiktok_shops, livestreams, livestream_products, mailboxes,
+                   email_subscriptions, emails RESTART IDENTITY CASCADE"""
             )
             for table in (
                 "product_snapshots",
@@ -147,6 +149,7 @@ def run(reset: bool = True) -> dict[str, int]:
                 "video_snapshots",
                 "entity_signals_daily",
                 "keyword_signals",
+                "keyword_signals_daily",
                 "score_history",
                 "change_events",
                 "store_metrics_daily",
@@ -339,6 +342,12 @@ def run(reset: bool = True) -> dict[str, int]:
                     (store["id"], kind, t_name, now - timedelta(days=rng.randint(1, 300))),
                 )
                 store["techs"].append(t_name)
+            for f_name in C.funnel_apps(store["domain"]):
+                cur.execute(
+                    "INSERT INTO store_technologies (store_id, type, name, detected_at) VALUES (%s,'app',%s,%s) ON CONFLICT DO NOTHING",
+                    (store["id"], f_name, now - timedelta(days=1 + len(f_name) * 7 % 200)),
+                )
+                store["techs"].append(f_name)
 
         ch.insert("store_metrics_daily", store_metric_rows, column_names=["store_id", "metric", "date", "value"])
 
@@ -933,6 +942,7 @@ def run(reset: bool = True) -> dict[str, int]:
     seed_ad_targets(settings.database_url, now)
     seed_marketplace_targets(settings.database_url, now)
     seed_trend_targets(settings.database_url, now)
+    seed_social_targets(settings.database_url, now)
     return {
         "niches": len(world.niches),
         "clusters": len(world.clusters),
@@ -1058,6 +1068,28 @@ def seed_trend_targets(database_url: str, now: datetime) -> None:
                 """INSERT INTO crawl_targets (connector_id, target, entity_type, entity_id, priority, interval_secs, next_run_at)
                    VALUES ('reddit', %s, 'keyword', %s, 50, 86400, %s)""",
                 (f"kw:{kid}", kid, now),
+            )
+        conn.commit()
+
+
+def seed_social_targets(database_url: str, now: datetime) -> None:
+    """TikTok Shop-ontdekking per niche, bekende creators, YouTube-zoektermen en Instagram-profielen."""
+    from trendscope.mockweb.tiktok_world import reset_tiktok_caches
+
+    reset_tiktok_caches()
+    settings = get_settings()
+    rows: list[tuple[str, str]] = [("tiktok_shop_partner", f"cat:{n}|{settings.trend_country}") for n in C.PRODUCTS]
+    rows += [("tiktok_shop_partner", f"creator:{h}") for h in C.CREATOR_HANDLES]
+    rows += [("instagram_business", f"ig:{h}") for h in C.CREATOR_HANDLES[:10]]
+    with psycopg.connect(database_url) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT term FROM keywords k WHERE kind = 'keyword' AND EXISTS (SELECT 1 FROM entity_links l WHERE l.from_type = 'keyword' AND l.from_id = k.id) ORDER BY id LIMIT 15"
+        )
+        rows += [("youtube_data", f"q:{t} review") for (t,) in cur.fetchall()]
+        for connector, target in rows:
+            cur.execute(
+                "INSERT INTO crawl_targets (connector_id, target, priority, interval_secs, next_run_at) VALUES (%s, %s, 50, 86400, %s)",
+                (connector, target, now),
             )
         conn.commit()
 

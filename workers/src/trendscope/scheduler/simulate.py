@@ -40,6 +40,21 @@ def _run_one(
     return run_target(_local.conn, _local.ch, settings, target_id, now=now, transport=transport)
 
 
+def _email_day(
+    conn: psycopg.Connection[Any], settings: Settings, day: int, transport: MockWebTransport
+) -> dict[str, int]:
+    from trendscope.connectors.base import load_manifests
+    from trendscope.core.clients import http_client_for
+    from trendscope.emails.ingest import mock_source, run_email_cycle
+
+    now = day_timestamp(day, 7)
+    with http_client_for(load_manifests()["seed_mailbox"], settings, transport=transport) as client:
+        stats = run_email_cycle(
+            conn, settings, now, client=client, source=mock_source(conn, day), subscribe=day % 7 == 1
+        )
+    return {k: v for k, v in stats.items() if v}
+
+
 def simulate(settings: Settings, days: int, *, progress: bool = True, workers: int = 8) -> dict[str, Any]:
     if settings.data_mode != "mock":
         raise RuntimeError("simulate werkt alleen met DATA_MODE=mock")
@@ -85,6 +100,8 @@ def simulate(settings: Settings, days: int, *, progress: bool = True, workers: i
 
             cstats = cluster_products(conn, now=day_timestamp(day, 23)).as_dict()
             totals.update({f"cluster_{k}": v for k, v in cstats.items()})
+            # Seed-mailbox: inschrijven (nieuwe winkels) en de mails van vandaag verwerken
+            totals.update(_email_day(conn, settings, day, transport))
             # Zoals de dagelijkse beat-job: hashtags, signalen en scores voor deze dag
             if ch_main is None:
                 ch_main = get_client()

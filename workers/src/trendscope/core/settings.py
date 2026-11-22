@@ -76,6 +76,17 @@ class Settings(BaseSettings):
     youtube_api_key: str = ""
     instagram_access_token: str = ""  # token van je eigen Instagram Business-account (Business Discovery)
     instagram_user_id: str = ""
+    # Fase 7: seed-mailbox (eigen domein; IMAP alleen-lezen)
+    email_seed_local: str = "inbox"
+    email_seed_domain: str = "seeds.trendscope.example"
+    email_imap_host: str = ""
+    email_imap_user: str = ""
+    email_imap_password: str = ""
+    email_track_stores: int = 40
+    # Fase 8: transactionele e-mail en links in meldingen
+    resend_api_key: str = ""
+    email_from: str = "Trendscope <alerts@trendscope.example>"
+    app_url: str = "http://localhost:3000"  # zoveel winkels per ronde inschrijven (gevolgde winkels eerst)
 
     # Media-opslag (S3-compatibel; lokaal MinIO)
     s3_endpoint: str = "http://localhost:9002"  # 9000 is ClickHouse native

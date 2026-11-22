@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, BadgeEuro, CalendarDays, Globe, History, Megaphone, Package, Play, Radar, Sparkles, Star, Users } from "lucide-react";
 import { DeltaBadge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { ShopEmailFunnel } from "@/components/shop/email-funnel";
 import { EstimateValue } from "@/components/ui/estimate";
 import { Flag, Thumb } from "@/components/ui/misc";
 import { PhaseBadge, ScoreRing } from "@/components/ui/score";
@@ -349,6 +350,16 @@ export default async function ShopPage({ params }: { params: Promise<{ id: strin
             ))}
           </div>
         </Card>
+
+        {/* E-mailmarketing en funnel */}
+        <ShopEmailFunnel
+          storeId={shop.id}
+          techs={data.tech.map((x) => x.name)}
+          emailsPerWeek={shop.emails_per_week}
+          avgDiscount={shop.avg_discount_pct}
+          esp={shop.email_esp}
+          t={t}
+        />
 
         {/* Ads + volgers */}
         <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Compass, Home, LayoutGrid, LineChart, LogOut, Moon, Radar, Search, Settings, Shield, Sun, Languages } from "lucide-react";
+import { Bell, Clapperboard, Compass, Home, LayoutGrid, LineChart, LogOut, Moon, Radar, Search, Settings, Shield, Sun, Languages } from "lucide-react";
 import { CommandPalette } from "./command-palette";
 import { useTransition } from "react";
 import { LogoMark } from "./logo";
@@ -15,7 +15,7 @@ import { logout } from "@/server/actions/auth";
 
 interface NavItem {
   href: string;
-  key: "home" | "explorer" | "brandtracker" | "trends" | "boards";
+  key: "home" | "explorer" | "brandtracker" | "trends" | "social" | "boards";
   icon: React.ComponentType<{ className?: string }>;
   match: string;
   soon?: boolean;
@@ -26,6 +26,7 @@ const ITEMS: NavItem[] = [
   { href: "/explorer/shops", key: "explorer", icon: Compass, match: "/explorer" },
   { href: "/brandtracker", key: "brandtracker", icon: Radar, match: "/brandtracker" },
   { href: "/trends", key: "trends", icon: LineChart, match: "/trends" },
+  { href: "/social", key: "social", icon: Clapperboard, match: "/social" },
   { href: "/boards", key: "boards", icon: LayoutGrid, match: "/boards" },
 ];
 
@@ -53,7 +54,7 @@ function RailLink({ href, active, label, icon: Icon, soon, soonLabel }: { href: 
   );
 }
 
-export function Sidebar({ email, theme, isAdmin }: { email: string; theme: "light" | "dark"; isAdmin: boolean }) {
+export function Sidebar({ email, theme, isAdmin, unread = 0 }: { email: string; theme: "light" | "dark"; isAdmin: boolean; unread?: number }) {
   const pathname = usePathname();
   const t = useT();
   const [, start] = useTransition();
@@ -100,8 +101,11 @@ export function Sidebar({ email, theme, isAdmin }: { email: string; theme: "ligh
           </Tooltip>
         )}
         <Tooltip content={t("nav.alerts")} side="right">
-          <Link href="/brandtracker" className="relative grid size-10 place-items-center rounded-xl text-frame-fg hover:bg-frame-hover hover:text-white">
+          <Link href="/alerts" aria-label={t("nav.alerts")} data-testid="nav-alerts" className={cn("relative grid size-10 place-items-center rounded-xl text-frame-fg hover:bg-frame-hover hover:text-white", pathname.startsWith("/alerts") && "bg-frame-hover text-white")}>
             <Bell className="size-[18px]" />
+            {unread > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 grid min-w-4 place-items-center rounded-full bg-accent px-1 text-[10px] leading-4 font-bold text-accent-fg">{unread > 99 ? "99+" : unread}</span>
+            )}
           </Link>
         </Tooltip>
         <Tooltip content={t("nav.theme")} side="right">
